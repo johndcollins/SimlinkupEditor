@@ -19,4 +19,15 @@ contextBridge.exposeInMainWorld('api', {
   openSignalsFile:     (filename)  => ipcRenderer.invoke('open-signals-file', filename),
   importSignalsFile:   (filename)  => ipcRenderer.invoke('import-signals-file', filename),
   openDriverConfig:    (args)      => ipcRenderer.invoke('open-driver-config', args),
+  // ── Live calibration bridge ────────────────────────────────────────────
+  // Spawn-on-first-call C# helper that writes synthetic sim signal values
+  // into the live sim's shared memory area. Used by the Calibration tab's
+  // "Live calibration" mode — see bridge/SimLinkupCalibrationBridge/.
+  bridge: {
+    isSimRunning: (sim)            => ipcRenderer.invoke('bridge:isSimRunning', { sim }),
+    startSession: (sim)            => ipcRenderer.invoke('bridge:startSession', { sim }),
+    setSignals:   (sim, signals)   => ipcRenderer.invoke('bridge:setSignals', { sim, signals }),
+    getSignals:   (sim, ids)       => ipcRenderer.invoke('bridge:getSignals', { sim, ids }),
+    endSession:   (sim)            => ipcRenderer.invoke('bridge:endSession', { sim }),
+  },
 });

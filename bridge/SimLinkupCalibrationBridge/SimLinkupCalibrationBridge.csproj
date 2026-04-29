@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SimLinkupCalibrationBridge — long-running stdio helper that the Electron
+    editor spawns when the user enters live calibration mode for a gauge.
+    The editor pushes synthetic sim signal values via JSON-on-stdin; this
+    process writes them to whichever sim's shared memory area is appropriate.
+
+    Targets net48 to match F4SharedMem's framework. Built x86 to match
+    F4SharedMem's hardcoded PlatformTarget — see PropertyGroup below for
+    why. Output is a self-contained-ish console exe (.NET Framework 4.8
+    is preinstalled on every supported Windows version, so no runtime to
+    bundle).
+
+    Files committed: only sources. The built `SimLinkupCalibrationBridge.exe`
+    + `F4SharedMem.dll` are produced by the GitHub Actions release workflow
+    and bundled into the Electron installer.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <RootNamespace>SimLinkupCalibrationBridge</RootNamespace>
+    <AssemblyName>SimLinkupCalibrationBridge</AssemblyName>
+    <LangVersion>9.0</LangVersion>
+    <UseWindowsForms>false</UseWindowsForms>
+    <!--
+      x86 (NOT AnyCPU) — must match the vendored F4SharedMem.csproj
+      which is hardcoded to <PlatformTarget>x86</PlatformTarget>. On
+      64-bit Windows, an AnyCPU host loading an x86 DLL throws
+      BadImageFormatException at runtime; matching architectures avoids
+      that. The downside is forcing the bridge process to run as 32-bit
+      regardless of host OS; for our workload (memory writes, process
+      check) that's irrelevant.
+    -->
+    <PlatformTarget>x86</PlatformTarget>
+    <Prefer32Bit>true</Prefer32Bit>
+    <NoWarn>1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\F4SharedMem\F4SharedMem.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Newtonsoft.Json — battle-tested on net48. System.Text.Json is .NET 6+
+         only (without polyfills), and our protocol is tiny so the perf
+         doesn't matter. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

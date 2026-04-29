@@ -38,10 +38,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Set up MSBuild
+        # The calibration bridge is .NET Framework 4.8; needs the MSBuild
+        # bundled with Visual Studio Build Tools. windows-latest runners
+        # already have it installed — setup-msbuild puts it on PATH.
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Restore + build calibration bridge
+        # nuget restore handles Newtonsoft.Json. The Release build's
+        # output (exe + dlls under bridge/SimLinkupCalibrationBridge/bin/
+        # Release/net48/) is what package.json's `extraResources` block
+        # ships into the installer.
+        run: |
+          nuget restore bridge\SimLinkupCalibrationBridge.sln
+          msbuild bridge\SimLinkupCalibrationBridge.sln /p:Configuration=Release /p:Platform=x86 /verbosity:minimal
+
       - name: Build Windows installer
         # electron-builder reads package.json's `build` block. Output goes
-        # to `dist/` per the configured `directories.output`.
-        run: npm run make
+        # to `dist/` per the configured `directories.output`. The
+        # `--publish=never` flag stops electron-builder from trying to
+        # publish to GitHub on its own — softprops/action-gh-release
+        # below is what actually creates the Release and uploads assets.
+        run: npx electron-builder --win --x64 --publish=never
         env:
           # Disable code signing — we don't ship a certificate. Users see
           # the standard Windows SmartScreen warning on first install,

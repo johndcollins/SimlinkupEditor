@@ -248,6 +248,12 @@ function renderGaugeCalibrationCard(pn) {
   // builds. Shown only when the on-disk file actually carried those fields.
   const extraHtml = renderGaugeExtras(pn, entry) || '';
 
+  // Live calibration block — only shown when at least one F4_* signal is
+  // wired into this gauge's input ports. Renders above the channel editors
+  // so the scrub sliders are easy to reach while you're tuning the
+  // breakpoint table below.
+  const liveHtml = renderLiveCalibration(pn) || '';
+
   card.innerHTML = `
     <summary class="calibration-card-head calibration-card-head-${status}">
       <span class="calibration-card-chevron" aria-hidden="true">▸</span>
@@ -258,8 +264,496 @@ function renderGaugeCalibrationCard(pn) {
       <button class="btn-sm" onclick="event.preventDefault(); event.stopPropagation(); resetGaugeCalibration('${escHtml(pn)}')">Reset to defaults</button>
       <span class="calibration-pill calibration-pill-${status}" title="${escHtml(pillTitle)}">${escHtml(pillText)}</span>
     </summary>
-    <div class="calibration-card-body">${channelHtml}${extraHtml}</div>`;
+    <div class="calibration-card-body">${liveHtml}${channelHtml}${extraHtml}</div>`;
   return card;
+}
+
+// ── Live calibration: input range inference ────────────────────────────────
+// The slider for "drive this gauge with sim value X" needs a min/max. The
+// authoritative source is the gauge's OWN calibration default (its
+// breakpoint table or inputMin/inputMax) — that's the range the gauge
+// can actually render, which is what the user wants to scrub through.
+//
+// Returns { min, max, units } for the gauge's input port. Falls back to
+// the signal-id-based inference (label parse or per-id table) when the
+// gauge lookup fails (e.g. unknown gauge port mapping, missing template).
+function gaugeInputRange(pn, gaugePort) {
+  const tpl = gaugeCalibrationDefaultsFor(pn);
+  if (!tpl) return null;
+  // gaugePort is the editor's port name (e.g. "RPM_From_Sim"). Channel
+  // ids are typically "<digits>_<name>_To_Instrument" where <name> is
+  // the gaugePort with "_From_Sim" stripped — for the common 1:1 input
+  // → output gauges. For gauges where one input drives multiple outputs
+  // (e.g. altimeter altitude → fine/coarse sin/cos), pick the first
+  // channel whose id contains the input name.
+  const inputName = gaugePort.replace(/_From_Sim$/, '');
+  for (const ch of tpl.channels) {
+    if (!ch.id || !ch.id.includes(inputName)) continue;
+    // Channel matches. Pick range from whichever fields the kind exposes.
+    if (ch.kind === 'piecewise' && ch.breakpoints && ch.breakpoints.length >= 2) {
+      const bps = ch.breakpoints;
+      return {
+        min: bps[0].input,
+        max: bps[bps.length - 1].input,
+        units: '',
+      };
+    }
+    if ((ch.kind === 'multi_resolver' || ch.kind === 'piecewise_resolver' || ch.kind === 'resolver' || ch.kind === 'linear')
+        && typeof ch.inputMin === 'number' && typeof ch.inputMax === 'number') {
+      return { min: ch.inputMin, max: ch.inputMax, units: '' };
+    }
+    // Found the channel but it doesn't carry range data (e.g. cos
+    // partner of a sin/cos pair). Look for the partner.
+    if (ch.partnerChannel) {
+      const partner = tpl.channels.find(c => c.id === ch.partnerChannel);
+      if (partner) {
+        if (typeof partner.inputMin === 'number' && typeof partner.inputMax === 'number') {
+          return { min: partner.inputMin, max: partner.inputMax, units: '' };
+        }
+        if (partner.breakpoints && partner.breakpoints.length >= 2) {
+          const bps = partner.breakpoints;
+          return { min: bps[0].input, max: bps[bps.length - 1].input, units: '' };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// Per-F4-signal range table — used as a FALLBACK when the gauge channel
+// lookup doesn't yield a range (cross-coupled inputs like the HSI's
+// bearing-to-beacon, gauges without a calibration template, etc.). The
+// upstream C# declares these via `CreateNewF4SimOutput("...", min, max, ...)`;
+// our extract-f4-signals.mjs script doesn't pass them through, so we
+// duplicate the values here.
+function inferSignalRange(signalId, label) {
+  // 1. Label-text parse. Patterns we've seen:
+  //   "Percent 0-103" / "Percent Open 0-100" / "Percent 0-100"
+  //   "0-360" (degrees)
+  //   "0..50000 ft"
+  if (label) {
+    let m = /(-?\d+(?:\.\d+)?)\s*[-–…]\s*(-?\d+(?:\.\d+)?)/.exec(label);
+    if (m) {
+      const lo = Number(m[1]), hi = Number(m[2]);
+      if (Number.isFinite(lo) && Number.isFinite(hi) && lo < hi) {
+        return { min: lo, max: hi, units: extractUnitsFromLabel(label) };
+      }
+    }
+  }
+  // 2. Per-signal-id table. Mirrors the 25 calibration-input signals our
+  //    bridge supports today; values copied from F4SimSupportModule.cs's
+  //    CreateNewF4SimOutput min/max args.
+  const TABLE = {
+    'F4_RPM1__RPM_PERCENT':                                     { min:    0, max:   103, units: '%' },
+    'F4_RPM2__RPM_PERCENT':                                     { min:    0, max:   103, units: '%' },
+    'F4_FTIT1__FTIT_TEMP_DEG_CELCIUS':                          { min:    0, max:  1200, units: '°C' },
+    'F4_FTIT2__FTIT_TEMP_DEG_CELCIUS':                          { min:    0, max:  1200, units: '°C' },
+    'F4_OIL_PRESS1__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
+    'F4_OIL_PRESS2__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
+    'F4_NOZ_POS1__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
+    'F4_NOZ_POS2__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
+    'F4_FUEL_FLOW1__FUEL_FLOW_POUNDS_PER_HOUR':                 { min:    0, max: 80000, units: 'lbs/hr' },
+    'F4_FUEL_FLOW2__FUEL_FLOW_POUNDS_PER_HOUR':                 { min:    0, max: 80000, units: 'lbs/hr' },
+    'F4_FUEL_QTY__INTERNAL_FUEL_POUNDS':                        { min:    0, max: 20000, units: 'lbs' },
+    'F4_FUEL_QTY__EXTERNAL_FUEL_POUNDS':                        { min:    0, max: 20000, units: 'lbs' },
+    'F4_EPU_FUEL__EPU_FUEL_PERCENT':                            { min:    0, max:   100, units: '%' },
+    'F4_HYD_PRESSURE_A__PSI':                                   { min:    0, max:  4000, units: 'psi' },
+    'F4_HYD_PRESSURE_B__PSI':                                   { min:    0, max:  4000, units: 'psi' },
+    'F4_AOA_INDICATOR__AOA_DEGREES':                            { min:  -10, max:    40, units: '°' },
+    'F4_AIRSPEED_MACH_INDICATOR__INDICATED_AIRSPEED_KNOTS':     { min:    0, max:   850, units: 'kts' },
+    'F4_AIRSPEED_MACH_INDICATOR__TRUE_AIRSPEED_KNOTS':          { min:    0, max:  1500, units: 'kts' },
+    'F4_AIRSPEED_MACH_INDICATOR__MACH_NUMBER':                  { min:    0, max:   2.5, units: 'M' },
+    'F4_ALTIMETER__INDICATED_ALTITUDE__MSL':                    { min: -1000, max: 80000, units: 'ft' },
+    'F4_ALTIMETER__BAROMETRIC_PRESSURE_INCHES_HG':              { min: 28.10, max: 31.00, units: 'inHg' },
+    'F4_TRUE_ALTITUDE__MSL':                                    { min: -1000, max: 80000, units: 'ft' },
+    'F4_VVI__VERTICAL_VELOCITY_FPM':                            { min: -6000, max:  6000, units: 'fpm' },
+    'F4_CABIN_PRESS__CABIN_PRESS_FEET_MSL':                     { min:    0, max: 50000, units: 'ft' },
+    'F4_COMPASS__MAGNETIC_HEADING_DEGREES':                     { min:    0, max:   360, units: '°' },
+    'F4_ADI__PITCH_DEGREES':                                    { min:  -90, max:    90, units: '°' },
+    'F4_ADI__ROLL_DEGREES':                                     { min: -180, max:   180, units: '°' },
+    'F4_STBY_ADI__PITCH_DEGREES':                               { min:  -90, max:    90, units: '°' },
+    'F4_STBY_ADI__ROLL_DEGREES':                                { min: -180, max:   180, units: '°' },
+    'F4_ADI__INCLINOMETER_POSITION':                            { min:   -1, max:     1, units: '' },
+    'F4_ADI__RATE_OF_TURN_INDICATOR_POSITION':                  { min:   -1, max:     1, units: '' },
+    'F4_ADI__ILS_HORIZONTAL_BAR_POSITION':                      { min:   -1, max:     1, units: '' },
+    'F4_ADI__ILS_VERTICAL_BAR_POSITION':                        { min:   -1, max:     1, units: '' },
+    'F4_HSI__COURSE_DEVIATION_DEGREES':                         { min:  -10, max:    10, units: '°' },
+    'F4_HSI__DESIRED_COURSE_DEGREES':                           { min:    0, max:   360, units: '°' },
+    'F4_HSI__BEARING_TO_BEACON_DEGREES':                        { min:    0, max:   360, units: '°' },
+    'F4_HSI__CURRENT_HEADING_DEGREES':                          { min:    0, max:   360, units: '°' },
+    'F4_HSI__DESIRED_HEADING_DEGREES':                          { min:    0, max:   360, units: '°' },
+    'F4_HSI__DISTANCE_TO_BEACON_NAUTICAL_MILES':                { min:    0, max:   999, units: 'nm' },
+    'F4_RPM2__RPM_PERCENT':                                     { min:    0, max:   103, units: '%' },
+    'F4_FUEL_FLOW2__FUEL_FLOW_POUNDS_PER_HOUR':                 { min:    0, max: 80000, units: 'lbs/hr' },
+    'F4_OIL_PRESS2__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
+    'F4_NOZ_POS2__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
+    'F4_FUEL_QTY__AFT_QTY_LBS':                                 { min:    0, max:  4200, units: 'lbs' },
+    'F4_FUEL_QTY__FOREWARD_QTY_LBS':                            { min:    0, max:  4200, units: 'lbs' },
+    'F4_FUEL_QTY__TOTAL_FUEL_LBS':                              { min:    0, max: 20000, units: 'lbs' },
+    'F4_GEAR_PANEL__GEAR_POSITION':                             { min:    0, max:     1, units: '' },
+    'F4_GEAR_PANEL__NOSE_GEAR_POSITION':                        { min:    0, max:     1, units: '' },
+    'F4_GEAR_PANEL__LEFT_GEAR_POSITION':                        { min:    0, max:     1, units: '' },
+    'F4_GEAR_PANEL__RIGHT_GEAR_POSITION':                       { min:    0, max:     1, units: '' },
+    'F4_SPEED_BRAKE__POSITION':                                 { min:    0, max:     1, units: '' },
+    'F4_FLIGHT_DYNAMICS__CLIMBDIVE_ANGLE_DEGREES':              { min:  -90, max:    90, units: '°' },
+    'F4_FLIGHT_DYNAMICS__SIDESLIP_ANGLE_DEGREES':               { min:  -10, max:    10, units: '°' },
+    'F4_MAP__GROUND_SPEED_KNOTS':                               { min:    0, max:  1500, units: 'kts' },
+  };
+  const t = TABLE[signalId];
+  if (t) return t;
+  return { min: -100, max: 100, units: '' };
+}
+
+function extractUnitsFromLabel(label) {
+  // Pull the units out of "(Percent 0-103)" → "%". Best-effort. Falls back
+  // to empty string if nothing matches.
+  if (!label) return '';
+  const m = /\(([^)]+)\)/.exec(label);
+  if (!m) return '';
+  const inner = m[1].toLowerCase();
+  if (/percent/.test(inner)) return '%';
+  if (/feet|msl/.test(inner)) return 'ft';
+  if (/knots/.test(inner)) return 'kts';
+  if (/degrees/.test(inner)) return '°';
+  if (/pounds per square inch|psi/.test(inner)) return 'psi';
+  if (/pounds per hour|lbs\/hr/.test(inner)) return 'lbs/hr';
+  if (/pounds|lbs/.test(inner)) return 'lbs';
+  if (/inhg|inches hg/.test(inner)) return 'inHg';
+  return '';
+}
+
+// ── Live calibration UI (writes to sim shared memory via bridge) ────────────
+//
+// When the user clicks "Start live calibration" on a gauge card, the editor:
+//
+//   1. Asks the bridge whether the live sim is currently running. If yes,
+//      shows an error and won't start (would fight over shared memory).
+//   2. Calls bridge.startSession to claim shared-memory write access.
+//   3. Re-renders the card with scrub sliders for each input port wired to
+//      a known sim signal. Slider drag pushes { signalId, value } to the
+//      bridge in real time; SimLinkup picks the value out of shared memory
+//      and drives the physical gauge through its DAC channel.
+//   4. On "Stop live calibration", calls bridge.endSession and clears the
+//      transient state.
+//
+// State lives on `_liveCalibration[pn] = { sim, sliderValues: {} }`. Per-pn
+// rather than singleton so the user can flip between gauges without losing
+// scrub position. (Only one session runs at a time per sim — starting a
+// second gauge implicitly ends the first.)
+const _liveCalibration = {};
+let _liveCalibrationActiveSim = null;
+let _liveCalibrationActivePn = null;
+
+function renderLiveCalibration(pn) {
+  const p = profiles[activeIdx];
+  const inst = INSTRUMENTS.find(i => i.pn === pn);
+  if (!inst) return '';
+
+  // Find every stage-1 edge wired into this gauge's input ports. Each
+  // gives us { gaugePort, simSignalId } — the slider needs both to know
+  // what to display and what to send to the bridge.
+  const wired = [];
+  const edges = (p.chain?.edges || []);
+  const digitPrefix = inst.digitPrefix || pn.replace(/-/g, '');
+  for (const edge of edges) {
+    if (edge.stage !== 1) continue;
+    if (edge.dstGaugePn !== pn) continue;
+    if (!edge.src) continue;
+    // Determine sim from the signal-id prefix. Today: F4_* → falcon4.
+    let sim = null;
+    if (edge.src.startsWith('F4_')) sim = 'falcon4';
+    if (!sim) continue;
+    // Look up the signal's display metadata for slider min/max + label.
+    // SIM_SIGNALS[sim].scalar / indexed are ARRAYS (not objects keyed by
+    // id); find the matching entry by linear scan. Strip any `[N]`
+    // indexed-signal suffix before matching the template id.
+    const sigCatalog = SIM_SIGNALS[sim];
+    let sigEntry = null;
+    if (sigCatalog) {
+      const baseSig = edge.src.replace(/\[\d+\]$/, '');
+      sigEntry = (sigCatalog.scalar || []).find(s => s.id === baseSig)
+              || (sigCatalog.indexed || []).find(s => s.id === baseSig)
+              || null;
+    }
+    // Live-cal sliders are for analog signals only. Digital signals
+    // (OFF/GS/LOC flags etc.) drive the gauge's discrete state via the
+    // gauge's `digital_invert` calibration channel — they don't need a
+    // scrubber here. Skip anything not declared analog by the catalog.
+    if (sigEntry && sigEntry.kind && sigEntry.kind !== 'analog') continue;
+    // Slider range: prefer the gauge's OWN calibration template (its
+    // breakpoint table covers exactly the input range the gauge can
+    // render — e.g. RPM v2's table goes 0..110, broader than the F4
+    // signal's 0..103 sim cap). Fall back to per-signal inference when
+    // the gauge lookup fails — happens for cross-coupled inputs (e.g.
+    // HSI bearing-to-beacon) and gauges without a calibration template.
+    const range = gaugeInputRange(pn, edge.dstGaugePort)
+      || inferSignalRange(edge.src, sigEntry?.label);
+    wired.push({
+      gaugePort: edge.dstGaugePort,
+      simSignalId: edge.src,
+      sim,
+      label: sigEntry?.label || edge.src,
+      sourceLabel: sigEntry?.coll && sigEntry?.sub
+        ? `${sigEntry.coll} → ${sigEntry.sub}`
+        : sigEntry?.coll || '',
+      min: range.min,
+      max: range.max,
+      units: range.units,
+    });
+  }
+
+  if (wired.length === 0) {
+    // No live calibration possible without a sim source. Render a hint
+    // pointing the user at the Mappings tab.
+    return `
+      <div class="live-cal-empty">
+        <strong>Live calibration unavailable.</strong>
+        Wire a sim source (e.g. an <code>F4_*</code> signal in Falcon BMS) to
+        each input port on this gauge from the <em>Signal Mappings</em> tab,
+        then return here to drive the gauge live.
+      </div>`;
+  }
+
+  // All wired signals must be from the same sim — we don't support
+  // multi-sim sessions (would need parallel bridge processes per sim).
+  const sim = wired[0].sim;
+  const allSameSim = wired.every(w => w.sim === sim);
+  if (!allSameSim) {
+    return `
+      <div class="live-cal-empty">
+        <strong>Live calibration unavailable.</strong>
+        This gauge has inputs wired to multiple sims at once; live calibration
+        only supports one sim per session. Adjust the Signal Mappings tab so
+        all inputs come from the same sim.
+      </div>`;
+  }
+
+  const isActive = _liveCalibrationActivePn === pn;
+  const state = _liveCalibration[pn] || { sliderValues: {} };
+
+  if (!isActive) {
+    return `
+      <div class="live-cal-card live-cal-card-idle">
+        <div class="live-cal-headline">
+          <strong>Live calibration</strong>
+          <span class="live-cal-sim-tag">${escHtml(sim)}</span>
+        </div>
+        <div class="live-cal-help">
+          Drives the physical gauge from sliders below. The bridge writes
+          synthetic sim values into ${escHtml(sim)}'s shared memory; SimLinkup
+          (running separately, watching the same memory) drives the DAC
+          channel for this gauge. Close ${escHtml(sim)} before starting —
+          the sim's own writes would overwrite calibration values.
+        </div>
+        <div class="live-cal-actions">
+          <button class="btn-primary" onclick="startLiveCalibration('${escHtml(pn)}','${escHtml(sim)}')">Start live calibration</button>
+        </div>
+      </div>`;
+  }
+
+  // Active session: render scrub sliders.
+  const sliderRows = wired.map(w => {
+    // Default starting value: clamp 0 into [min, max]. That gives the
+    // gauge's natural rest position for most signals — RPM 0%, VVI 0 fpm,
+    // pitch/roll 0° (level). For ranges that don't include 0 (e.g. baro
+    // 28.10..31.00 inHg) it clamps to the closest endpoint, which is
+    // close enough — the user drags from there. Per-signal "ideal"
+    // baselines (e.g. baro 29.92) could be added to the inferSignalRange
+    // table later if needed.
+    const cur = (typeof state.sliderValues[w.simSignalId] === 'number')
+      ? state.sliderValues[w.simSignalId]
+      : Math.max(w.min, Math.min(w.max, 0));
+    const step = ((w.max - w.min) / 1000) || 1;
+    const rangeText = `${formatNum(w.min)} – ${formatNum(w.max)}${w.units ? ' ' + w.units : ''}`;
+    return `
+      <div class="live-cal-row">
+        <div class="live-cal-row-label">
+          <div class="live-cal-row-name">${escHtml(w.simSignalId)}</div>
+          <div class="live-cal-row-source">${escHtml(w.sourceLabel)}</div>
+          <div class="live-cal-row-port">→ ${escHtml(w.gaugePort)}</div>
+        </div>
+        <input type="range"
+               min="${formatNum(w.min)}" max="${formatNum(w.max)}"
+               step="${formatNum(step)}"
+               value="${formatNum(cur)}"
+               oninput="setLiveCalibrationSlider('${escHtml(pn)}','${escHtml(w.simSignalId)}',this.value, this)"/>
+        <input type="number"
+               value="${formatNum(cur)}"
+               step="${formatNum(step)}"
+               onchange="setLiveCalibrationSlider('${escHtml(pn)}','${escHtml(w.simSignalId)}',this.value, this)"
+               class="live-cal-row-num"/>
+        <span class="live-cal-row-units" title="${escHtml(w.label)}">${escHtml(rangeText)}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="live-cal-card live-cal-card-active">
+      <div class="live-cal-headline">
+        <span class="live-cal-pulse"></span>
+        <strong>Live calibration active</strong>
+        <span class="live-cal-sim-tag">${escHtml(sim)}</span>
+        <button class="btn-danger btn-sm" onclick="stopLiveCalibration('${escHtml(pn)}')">Stop</button>
+      </div>
+      <div class="live-cal-help">
+        Move a slider to push that value into ${escHtml(sim)}'s shared memory.
+        SimLinkup reads the value, applies your calibration table below, and
+        drives the gauge. Tune the breakpoint voltages until the gauge reads
+        correctly at each scrub-slider position.
+      </div>
+      <div class="live-cal-rows">${sliderRows}</div>
+    </div>`;
+}
+
+async function startLiveCalibration(pn, sim) {
+  // Refuse if another gauge is already in a live session — only one session
+  // per sim, and only one pn per session.
+  if (_liveCalibrationActivePn && _liveCalibrationActivePn !== pn) {
+    if (!confirm(`A live calibration session is already active on ${_liveCalibrationActivePn}. Stop that session and start one on ${pn} instead?`)) return;
+    await stopLiveCalibration(_liveCalibrationActivePn, /*silent*/ true);
+  }
+  if (!window.api?.bridge) {
+    toast('Calibration bridge is not available in this build.');
+    return;
+  }
+  // Check sim isn't running.
+  const check = await window.api.bridge.isSimRunning(sim);
+  if (!check?.ok) {
+    toast(`Bridge error: ${check?.error || 'unknown'}`);
+    return;
+  }
+  if (check.running) {
+    toast(`The sim (${sim}) is currently running. Close it before starting a calibration session.`);
+    return;
+  }
+  // Start session.
+  const start = await window.api.bridge.startSession(sim);
+  if (!start?.ok) {
+    toast(`Bridge error: ${start?.error || 'unknown'}`);
+    return;
+  }
+  _liveCalibrationActivePn = pn;
+  _liveCalibrationActiveSim = sim;
+  _liveCalibration[pn] = _liveCalibration[pn] || { sliderValues: {} };
+
+  // Read the current shared-memory values so the slider initial position
+  // reflects whatever the gauge is actually being driven from RIGHT NOW
+  // — not a synthetic baseline. Useful when:
+  //   - A previous calibration session left values in shared memory.
+  //   - Another tool is feeding the gauge.
+  //   - The gauge has a sensible "rest" position the user wants to
+  //     preserve.
+  // Bridge-unknown signals (or any signal we couldn't read) get the
+  // editor's inferred baseline (clamp 0 into [min, max]) as a fallback.
+  const p = profiles[activeIdx];
+  const inst = INSTRUMENTS.find(i => i.pn === pn);
+  if (inst) {
+    const edges = (p.chain?.edges || []);
+    const idsToRead = [];
+    const wiredEdges = [];
+    for (const edge of edges) {
+      if (edge.stage !== 1) continue;
+      if (edge.dstGaugePn !== pn) continue;
+      if (!edge.src || !edge.src.startsWith('F4_')) continue;
+      idsToRead.push(edge.src);
+      wiredEdges.push(edge);
+    }
+    if (idsToRead.length) {
+      let readResult = null;
+      try { readResult = await window.api.bridge.getSignals(sim, idsToRead); } catch {}
+      const values = (readResult && readResult.ok && readResult.values) || {};
+      for (const edge of wiredEdges) {
+        if (typeof values[edge.src] === 'number' && Number.isFinite(values[edge.src])) {
+          _liveCalibration[pn].sliderValues[edge.src] = values[edge.src];
+        } else {
+          // Fallback: clamp 0 into the gauge's input range (or sim
+          // signal range if the gauge has no template).
+          const sigCatalog = SIM_SIGNALS[sim];
+          const baseSig = edge.src.replace(/\[\d+\]$/, '');
+          const sigEntry = sigCatalog
+            ? ((sigCatalog.scalar || []).find(s => s.id === baseSig)
+               || (sigCatalog.indexed || []).find(s => s.id === baseSig))
+            : null;
+          const range = gaugeInputRange(pn, edge.dstGaugePort)
+            || inferSignalRange(edge.src, sigEntry?.label);
+          _liveCalibration[pn].sliderValues[edge.src] = Math.max(range.min, Math.min(range.max, 0));
+        }
+      }
+    }
+  }
+
+  renderCalibration();
+  toast(`Live calibration started for ${pn}.`);
+}
+
+async function stopLiveCalibration(pn, silent) {
+  const sim = _liveCalibrationActiveSim;
+  _liveCalibrationActivePn = null;
+  _liveCalibrationActiveSim = null;
+  if (!silent) renderCalibration();
+  if (sim && window.api?.bridge) {
+    try { await window.api.bridge.endSession(sim); } catch {}
+  }
+  if (!silent) toast(`Live calibration stopped for ${pn}.`);
+}
+
+// Slider/number input handler. Updates local state, mirrors slider↔number
+// input pair, throttles writes to the bridge so a fast drag doesn't flood
+// the stdio channel.
+//
+// `srcEl` is the input element that fired the event (the slider OR the
+// number input). We use it to find its sibling and update the OTHER one
+// so both stay visually in sync without a full re-render.
+let _liveCalThrottleTimer = null;
+const _liveCalPendingSignals = {};
+
+function setLiveCalibrationSlider(pn, simSignalId, value, srcEl) {
+  const v = Number(value);
+  if (!Number.isFinite(v)) return;
+  if (_liveCalibrationActivePn !== pn) {
+    console.warn('[live-cal] slider drag ignored — pn mismatch', pn, 'active:', _liveCalibrationActivePn);
+    return;
+  }
+  const sim = _liveCalibrationActiveSim;
+  if (!sim) {
+    console.warn('[live-cal] slider drag ignored — no active sim');
+    return;
+  }
+  _liveCalibration[pn] = _liveCalibration[pn] || { sliderValues: {} };
+  _liveCalibration[pn].sliderValues[simSignalId] = v;
+  _liveCalPendingSignals[simSignalId] = v;
+
+  // Mirror the new value into the sibling input (slider ↔ number) without
+  // a re-render, so dragging the slider updates the number readout and
+  // vice versa.
+  if (srcEl && srcEl.parentElement) {
+    const row = srcEl.parentElement;
+    const isSlider = srcEl.type === 'range';
+    const sibling = row.querySelector(isSlider ? 'input[type="number"]' : 'input[type="range"]');
+    if (sibling && document.activeElement !== sibling) sibling.value = String(v);
+  }
+
+  if (_liveCalThrottleTimer) return;
+  _liveCalThrottleTimer = setTimeout(async () => {
+    const batch = { ..._liveCalPendingSignals };
+    Object.keys(_liveCalPendingSignals).forEach(k => delete _liveCalPendingSignals[k]);
+    _liveCalThrottleTimer = null;
+    if (window.api?.bridge && Object.keys(batch).length) {
+      try {
+        const res = await window.api.bridge.setSignals(sim, batch);
+        if (res && res.ok === false) {
+          console.error('[live-cal] bridge.setSignals failed:', res.error);
+          toast(`Bridge error: ${res.error}`);
+        } else if (res && res.unknown && res.unknown.length) {
+          // Bridge couldn't route some signals — surface so the user knows
+          // their slider isn't actually doing anything for those signals.
+          console.warn('[live-cal] bridge did not route these signals:', res.unknown);
+          toast(`Bridge does not yet support these signals: ${res.unknown.join(', ')}`);
+        }
+      } catch (e) {
+        console.error('[live-cal] bridge.setSignals exception:', e);
+      }
+    }
+  }, 33);  // ~30 Hz, matches what BMS shared memory updates would naturally feel like
 }
 
 // Per-gauge extra UI sections that don't fit the per-channel grid. Today

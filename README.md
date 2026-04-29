@@ -32,16 +32,44 @@ the editor is never part of the flight-time process tree.
 
 ---
 
-## Requirements
+## For most users: just download the installer
+
+If you don't want to build anything, just grab the prebuilt installer:
+
+1. Go to https://github.com/johndcollins/SimlinkupEditor/releases
+2. Download the latest `SimLinkup Profile Editor Setup X.Y.Z.exe`
+3. Run it. The installer extracts the editor and the calibration bridge
+   into Program Files; live calibration works out of the box.
+
+> **Where to install SimLinkup itself.** SimLinkup keeps your profile,
+> mapping, and calibration files inside its own `Content\Mapping`
+> folder — and the editor needs to write to that folder every time you
+> save. If you install SimLinkup under `C:\Program Files\` (or any
+> other UAC-protected location), Windows will block writes from
+> anything that isn't running as administrator. To avoid running the
+> editor as admin every time, install SimLinkup somewhere unprotected
+> like `C:\SimLinkup\` or `C:\Tools\SimLinkup\`. The editor's titlebar
+> shows a red "This folder is read-only" banner if it detects a
+> protected location after you pick a directory.
+
+The rest of this README is for contributors building from source.
+
+---
+
+## Requirements (building from source)
 
 - **Node.js** (v18 or newer) — https://nodejs.org
   Download the LTS installer and run it. Just click through the defaults.
+- **.NET SDK** (v6 or newer) — https://dotnet.microsoft.com/download
+  Required to compile the calibration bridge (`bridge/SimLinkupCalibrationBridge`).
+  The Visual Studio "Build Tools for Visual Studio" installer also works
+  if you'd rather build through VS.
 
 ---
 
 ## Setup (do this once)
 
-1. **Unzip** this folder anywhere on your PC (e.g. `C:\SimLinkupEditor`)
+1. **Clone or unzip** this repo anywhere on your PC (e.g. `C:\SimLinkupEditor`)
 2. **Open a terminal** in that folder:
    - In Windows Explorer, click the address bar, type `cmd`, press Enter
 3. Run:
@@ -49,6 +77,10 @@ the editor is never part of the flight-time process tree.
    npm install
    ```
    This downloads Electron (~100MB). Takes a minute or two.
+
+`npm install` only handles the JS/Electron dependencies. The C# calibration
+bridge is built automatically the first time you run `npm start` or
+`npm run make` — see below.
 
 ---
 
@@ -58,7 +90,9 @@ the editor is never part of the flight-time process tree.
 npm start
 ```
 
-The editor window opens immediately. No install needed.
+`npm start` runs `prestart` first, which compiles the bridge via
+`dotnet build`. After that the editor window opens. The bridge build is
+incremental, so subsequent launches are near-instant.
 
 On first launch you'll see a safety disclaimer modal — read it, tick the
 acknowledgment box, and click **I understand and accept**. Your acceptance
@@ -131,13 +165,49 @@ The editor has six tabs that line up with the order you'd build a profile in:
      input range.
    - **Digital invert** — single boolean for OFF flag inputs.
    See the per-gauge breakdown below for what each gauge offers.
-10. **Save to disk** — writes everything into your SimLinkup
+10. **Live calibration** (inside each Calibration card) — drives the
+    physical gauge from sliders in the editor for hands-on hardware
+    tuning. Click **Start live calibration** on a gauge card and the
+    editor spawns a small bridge process that writes synthetic Falcon
+    BMS values into shared memory. SimLinkup, watching the same memory,
+    drives the DAC channel for that gauge. Drag the slider to sweep
+    through the input range; tune the breakpoint voltages until the
+    physical needle lands on each labelled mark. Refuses to start while
+    Falcon BMS is actually running (its writes would fight yours). See
+    the **Live calibration architecture** section below for details.
+11. **Save to disk** — writes everything into your SimLinkup
     `Content\Mapping\<ProfileName>\` folder, ready for SimLinkup to load.
-11. **Set as default** — writes `default.profile` so SimLinkup loads this
+12. **Set as default** — writes `default.profile` so SimLinkup loads this
     profile next time it starts.
 
 The tab headers show issue badges if anything's wrong. The sidebar shows a
 `⚠ N` badge per profile if it has any broken mappings.
+
+---
+
+## Live calibration architecture
+
+When you click **Start live calibration** on a gauge card, the editor
+spawns a small C# helper process (`SimLinkupCalibrationBridge.exe`,
+sources in `bridge/`). The bridge:
+
+- Refuses to start if Falcon BMS is already running — both can't write
+  to the same shared memory at once.
+- Reads the current shared memory state on session open, so each slider
+  starts at whatever the gauge is being driven from right now (rather
+  than a synthetic baseline).
+- Receives signal-value updates from the editor over a JSON-on-stdio
+  protocol and stamps them into the canonical Falcon BMS memory areas
+  (`FalconSharedMemoryArea`, `FalconSharedMemoryArea2`).
+- SimLinkup, running separately and already wired to read those areas,
+  picks up the values and drives whatever DAC channels your profile
+  declares — same code path it uses with the real sim.
+
+This means **your calibration is honest**: the gauge sees the same data
+flow at calibration time that it'll see at flight time. No second
+"calibration mode" code path that diverges from production. See
+`bridge/SimLinkupCalibrationBridge/Sims/Falcon/FalconBridge.cs` for the
+F4 signal-id → struct field mapping.
 
 ---
 

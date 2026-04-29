@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 let mainWindow;
 
@@ -598,5 +598,157 @@ ipcMain.handle('open-driver-config', async (_, { profileDir, filename, defaultCo
   } catch (e) {
     return { success: false, error: e.message };
   }
+});
+
+// ── Calibration bridge (Falcon BMS shared memory + future sims) ─────────────
+//
+// Lazily-spawned long-running C# helper at:
+//   bridge/SimLinkupCalibrationBridge/bin/x86/Release/net48/SimLinkupCalibrationBridge.exe
+// (in dev — the x86 segment is there because the bridge csproj sets
+// <PlatformTarget>x86</PlatformTarget> to match the vendored F4SharedMem).
+// When packaged, electron-builder copies it into the installer's
+// resources/bridge/ folder via the `extraResources` config in package.json.
+//
+// Protocol: JSON-per-line over stdio. Each request gets a unique id; the
+// response carries the same id. Errors come back as { ok: false, error }.
+//
+// IPC handlers exposed to the renderer:
+//   bridge:isSimRunning  ({ sim })                   → { ok, running?, error? }
+//   bridge:startSession  ({ sim })                   → { ok, error? }
+//   bridge:setSignals    ({ sim, signals })          → { ok, unknown?, error? }
+//   bridge:getSignals    ({ sim, ids })              → { ok, values?, unknown?, error? }
+//   bridge:endSession    ({ sim })                   → { ok, error? }
+//
+// We hold ONE bridge process per app session. App quit kills it.
+
+let _bridgeProc = null;
+let _bridgeReadBuffer = '';
+let _bridgeNextId = 0;
+const _bridgePending = new Map();   // id (string) → { resolve, reject, timer }
+
+function bridgeExePath() {
+  // Two possible locations: packaged (resources/bridge/...) and dev
+  // (repo-relative). Try packaged first since `app.isPackaged` is the
+  // cheap check. Dev path includes the x86 segment because the bridge
+  // csproj's <PlatformTarget>x86</PlatformTarget> emits to
+  // bin/x86/Release/net48/ rather than the AnyCPU bin/Release/net48/.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'bridge', 'SimLinkupCalibrationBridge.exe');
+  }
+  return path.join(__dirname, 'bridge', 'SimLinkupCalibrationBridge', 'bin', 'x86', 'Release', 'net48', 'SimLinkupCalibrationBridge.exe');
+}
+
+function ensureBridge() {
+  if (_bridgeProc && !_bridgeProc.killed) return _bridgeProc;
+  const exe = bridgeExePath();
+  if (!fs.existsSync(exe)) {
+    throw new Error(`Calibration bridge not found at ${exe}. Build the bridge solution (bridge/SimLinkupCalibrationBridge.sln) before using live calibration.`);
+  }
+  _bridgeProc = spawn(exe, [], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  _bridgeProc.stdout.setEncoding('utf8');
+  _bridgeProc.stderr.setEncoding('utf8');
+
+  _bridgeProc.stdout.on('data', (chunk) => {
+    _bridgeReadBuffer += chunk;
+    // Process whole lines only; partial lines wait for the next chunk.
+    let nl;
+    while ((nl = _bridgeReadBuffer.indexOf('\n')) >= 0) {
+      const line = _bridgeReadBuffer.slice(0, nl).trim();
+      _bridgeReadBuffer = _bridgeReadBuffer.slice(nl + 1);
+      if (!line) continue;
+      try {
+        const obj = JSON.parse(line);
+        const pending = _bridgePending.get(obj.id);
+        if (pending) {
+          clearTimeout(pending.timer);
+          _bridgePending.delete(obj.id);
+          pending.resolve(obj);
+        }
+        // Unknown id → orphan response; ignore.
+      } catch {
+        // Unparseable line; ignore (could be debug noise from the C# side
+        // if we ever add Console.WriteLine for diagnostics).
+      }
+    }
+  });
+
+  _bridgeProc.stderr.on('data', (chunk) => {
+    // Surface bridge stderr to the main process console for debugging.
+    // Don't propagate to the renderer; bridge errors should already come
+    // back as { ok:false, error } in the JSON channel.
+    console.error('[bridge stderr]', chunk.toString().trim());
+  });
+
+  _bridgeProc.on('exit', (code, signal) => {
+    // Reject every pending request — bridge died.
+    for (const [, pending] of _bridgePending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(`Calibration bridge exited (code=${code} signal=${signal}).`));
+    }
+    _bridgePending.clear();
+    _bridgeProc = null;
+  });
+
+  return _bridgeProc;
+}
+
+// Send one command, await one response. Times out after 5s — bridge work
+// is sub-millisecond on Windows (memory writes, process check); a longer
+// wait means the bridge is hung and we should surface that to the user.
+function bridgeRequest(cmd, extras) {
+  return new Promise((resolve, reject) => {
+    let proc;
+    try { proc = ensureBridge(); } catch (e) { return reject(e); }
+    const id = String(++_bridgeNextId);
+    const payload = JSON.stringify({ id, cmd, ...(extras || {}) }) + '\n';
+    const timer = setTimeout(() => {
+      _bridgePending.delete(id);
+      reject(new Error(`Calibration bridge timed out after 5s on command '${cmd}'.`));
+    }, 5000);
+    _bridgePending.set(id, { resolve, reject, timer });
+    try {
+      proc.stdin.write(payload, 'utf8');
+    } catch (e) {
+      clearTimeout(timer);
+      _bridgePending.delete(id);
+      reject(e);
+    }
+  });
+}
+
+ipcMain.handle('bridge:isSimRunning', async (_, { sim }) => {
+  try { return await bridgeRequest('isSimRunning', { sim }); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('bridge:startSession', async (_, { sim }) => {
+  try { return await bridgeRequest('startSession', { sim }); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('bridge:setSignals', async (_, { sim, signals }) => {
+  try { return await bridgeRequest('setSignals', { sim, signals }); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('bridge:getSignals', async (_, { sim, ids }) => {
+  try { return await bridgeRequest('getSignals', { sim, ids }); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('bridge:endSession', async (_, { sim }) => {
+  try { return await bridgeRequest('endSession', { sim }); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Tear down the bridge cleanly on app quit. Best-effort: send shutdown,
+// give the process a moment to exit, then kill if it doesn't.
+app.on('before-quit', () => {
+  if (!_bridgeProc) return;
+  try { _bridgeProc.stdin.write(JSON.stringify({ id: 'shutdown', cmd: 'shutdown' }) + '\n'); } catch {}
+  setTimeout(() => { try { _bridgeProc?.kill(); } catch {} }, 500);
 });
 

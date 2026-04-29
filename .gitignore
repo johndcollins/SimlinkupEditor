@@ -38,3 +38,18 @@ attitude.xlsx
 
 # Claude Code session state (local; not part of the project)
 .claude/
+
+# ── .NET / calibration bridge build output ────────────────────────────────
+# The bridge project (bridge/SimLinkupCalibrationBridge.sln) builds via
+# MSBuild and emits per-project bin/ and obj/ directories. The Release-
+# x86 build is what gets bundled into the installer via electron-builder's
+# extraResources, but it's produced at build time on the GitHub Actions
+# runner — not committed.
+bin/
+obj/
+*.user
+*.suo
+.vs/
+packages/
+TestResults/
+*.pdb

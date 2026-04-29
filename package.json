@@ -1,12 +1,15 @@
 {
   "name": "simlinkup-profile-editor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "SimLinkup",
   "description": "SimLinkup profile editor — create and manage custom mapping profiles with Simtek instruments",
   "main": "main.js",
   "scripts": {
+    "build:bridge": "dotnet build bridge/SimLinkupCalibrationBridge.sln -c Release -p:Platform=x86 --verbosity minimal",
+    "prestart": "npm run build:bridge",
+    "premake": "npm run build:bridge",
     "start": "electron .",
-    "make": "electron-builder --win --x64"
+    "make": "electron-builder --win --x64 --publish=never"
   },
   "build": {
     "appId": "com.simlinkup.profileeditor",
@@ -30,6 +33,13 @@
       "preload.js",
       "src/**/*",
       "assets/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "bridge/SimLinkupCalibrationBridge/bin/x86/Release/net48/",
+        "to": "bridge/",
+        "filter": ["*.exe", "*.dll", "*.config"]
+      }
     ]
   },
   "devDependencies": {

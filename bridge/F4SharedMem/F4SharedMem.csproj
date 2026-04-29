@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    F4SharedMem — Falcon BMS shared-memory readers/writers and the BMS4
+    flight-data structs. Vendored from lightningstools' F4SharedMem; see
+    bridge/SimLinkupCalibrationBridge/Sims/Falcon/FalconBridge.cs for the
+    consumer.
+
+    Targets netstandard2.0 so the assembly is portable across .NET
+    Framework 4.8 (the bridge today) and any future .NET 6/8 host. The
+    code is just struct layouts + Win32 P/Invokes via NativeMethods.cs;
+    no framework-specific APIs.
+
+    Strong-name signing is OFF — see the comment block below in
+    SignAssembly. Vendored copy lives next to the bridge exe; no GAC
+    consumer.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>F4SharedMem</RootNamespace>
+    <AssemblyName>F4SharedMem</AssemblyName>
+    <LangVersion>9.0</LangVersion>
+    <!--
+      Upstream lightningstools signs F4SharedMem because it's published
+      as a library used across many projects with strict version binding.
+      Our copy only ever loads from the bridge's own folder; signing here
+      would let the runtime confuse our private copy with a publicly-
+      strong-named copy at load time and refuse the substitution. We hit
+      that bug while wiring up live calibration; turning signing off
+      avoids it permanently.
+    -->
+    <SignAssembly>false</SignAssembly>
+    <NoWarn>1591;3003</NoWarn>
+    <!--
+      Keep the hand-written Properties/AssemblyInfo.cs (carries the
+      upstream AssemblyVersion 4.35.0.0 which we want to preserve as a
+      provenance marker for the vendored copy). Without this, SDK-style
+      csprojs auto-generate their own assembly attributes and collide
+      with the hand-written ones.
+    -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+</Project>
