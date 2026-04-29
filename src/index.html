@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SimLinkup Profile Editor</title>
+<link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+<!-- Titlebar -->
+<div class="titlebar">
+  <div class="titlebar-left">
+    <div>
+      <div class="app-name">SimLinkup Profile Editor</div>
+      <div class="app-sub" id="dirLabel">No profile directory selected</div>
+    </div>
+  </div>
+  <div class="titlebar-right">
+    <button onclick="autoDetectDir()">Auto-detect</button>
+    <button onclick="pickDir()">Change directory</button>
+    <button onclick="openFolder()" id="btnOpenFolder" disabled>Open in Explorer</button>
+    <button onclick="window.api.openUserDataFolder()" title="Open the editor's user-data folder where you can override instruments.json or f4-signals.json">Data folder</button>
+  </div>
+</div>
+
+<!-- Dir picker banner (shown when no dir set) -->
+<div class="dir-banner" id="dirBanner">
+  <div>
+    <div class="dir-banner-text">Select your SimLinkup <strong>Content/Mapping</strong> folder to load and save profiles directly to disk.</div>
+  </div>
+  <button class="btn-primary" onclick="pickDir()">Select folder…</button>
+</div>
+
+<!-- Read-only banner (shown when the selected dir requires elevation, e.g. Program Files) -->
+<div class="dir-banner danger" id="readOnlyBanner" style="display:none">
+  <div>
+    <div class="dir-banner-text"><strong>This folder is read-only.</strong> Saves will fail because writing to <span id="readOnlyPath" class="dir-path"></span> requires admin rights. Run the editor as administrator, or pick a writable copy of <strong>Content/Mapping</strong>.</div>
+  </div>
+  <button class="btn-primary" onclick="pickDir()">Pick a different folder…</button>
+</div>
+
+<div class="main-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-head">
+      <span class="sidebar-title">Profiles</span>
+      <span id="profileCount" style="font-size:10px;color:var(--text-secondary)">0</span>
+    </div>
+    <div class="profile-list" id="profileList">
+      <div class="empty">No profiles loaded</div>
+    </div>
+    <div class="new-profile-area">
+      <input type="text" id="newProfileName" placeholder="New profile name…" onkeydown="if(event.key==='Enter')addProfile()">
+      <button class="btn-primary" onclick="addProfile()">+ Create profile</button>
+    </div>
+  </div>
+
+  <!-- Editor -->
+  <div class="editor">
+    <div class="editor-head">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="editor-title" id="editorTitle">Select a profile</div>
+          <span id="editorDefaultBadge" class="default-badge" style="display:none">default</span>
+        </div>
+        <div class="editor-meta" id="editorMeta">Create a new profile or select one from the list</div>
+      </div>
+      <div class="editor-actions">
+        <span class="status-msg" id="saveStatus"></span>
+        <button class="btn-danger btn-sm" id="btnDelete" onclick="deleteProfile()" disabled>Delete</button>
+        <button onclick="setDefault()" id="btnDefault" disabled>Set as default</button>
+        <button class="btn-success" id="btnSave" onclick="saveProfile()" disabled>Save to disk</button>
+      </div>
+    </div>
+    <div class="editor-body" id="editorBody">
+      <div class="empty">Select or create a profile to get started.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- First-launch safety disclaimer. Hidden by default; shown by init.js
+     when settings.disclaimerAcceptedAt is unset. Refuse closes the app;
+     accept persists the timestamp + app version into settings.json so it
+     never appears again on this machine for this user. -->
+<div id="disclaimerOverlay" style="display:none">
+  <div class="disclaimer-card">
+    <div class="disclaimer-title">Important — please read before you continue</div>
+    <div class="disclaimer-body">
+      <p>
+        SimLinkup Profile Editor lets you edit calibration data and signal
+        wiring for a wide range of cockpit instruments. Some of those
+        instruments are decades old and the project does not own a sample
+        of every gauge, so behavior on hardware we have not personally
+        tested cannot be guaranteed.
+      </p>
+      <p>
+        Editing calibration values incorrectly — including breakpoint
+        voltages, trim values, output ranges, or wiring — can damage your
+        instruments. Voltages outside a gauge's design envelope can burn
+        out coils, drive needles past mechanical stops, or stress
+        electronic components in ways that are not always visible
+        immediately.
+      </p>
+      <p>
+        <strong>By clicking "I understand and accept" you acknowledge:</strong>
+      </p>
+      <ul>
+        <li>You are using this tool at your own risk.</li>
+        <li>The authors and contributors are not liable for any damage to
+          your instruments, hardware, or aircraft components, whether
+          partial or complete, recoverable or permanent.</li>
+        <li>You are responsible for verifying calibration values against
+          your specific gauge's documentation before applying them.</li>
+        <li>You should test new calibration settings at low signal levels
+          first whenever practical.</li>
+      </ul>
+      <p>
+        If you do not accept these terms, click "Decline and exit" — the
+        application will close and no settings will be saved.
+      </p>
+    </div>
+    <label class="disclaimer-checkbox">
+      <input type="checkbox" id="disclaimerCheckbox" onchange="updateDisclaimerAcceptButton()">
+      I have read and understood the above.
+    </label>
+    <div class="disclaimer-actions">
+      <button class="btn-danger" onclick="declineDisclaimer()">Decline and exit</button>
+      <button class="btn-primary" id="disclaimerAcceptBtn" onclick="acceptDisclaimer()" disabled>I understand and accept</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  Renderer JS, loaded as plain <script> tags (not ES modules) so functions and
+  module-scope `let`s remain global — the inline onclick= handlers above call
+  them by name. Load order matters:
+    1. state.js              — top-level lets read by every other file
+    2. util.js               — escHtml/escXml/toast/clamps used everywhere
+    3. catalogs.js           — DRIVER_PATTERNS/META, SIM_SUPPORTS, DRIVER_OPTIONS/HINTS
+    4. driver-defaults       — *_DEFAULTS + default-device factories
+    5. driver-parsers        — XML→state parsers + backfill helpers (output drivers)
+    6. calibration-defaults  — empty GAUGE_CALIBRATION_DEFAULTS index map + helpers
+    6a. js/gauges/*.js        — one file per gauge, self-registers its entry
+                                 into GAUGE_CALIBRATION_DEFAULTS at load time
+    7. gauge-config-io       — per-gauge XML reader/writer + parseGaugeConfigs
+    8. chain.js              — chain model + applyLoadedChain (calls parsers)
+    9. save.js               — XML writers + mapping-file generation
+    10. sidebar.js           — page chrome (renderSidebar/renderEditor/switchTab)
+    11. tab-instruments      — Instruments + Active tabs
+    12. tab-mappings         — Signal Mappings tab + onSet* handlers + conflict map
+    13. tab-hardware         — Hardware tab (driver declaration)
+    14. tab-hardware-config  — Hardware Config tab (per-driver editors)
+    15. tab-simsupport       — SimSupport tab
+    16. tab-calibration      — Calibration tab (per-gauge transform editors)
+    17. profile.js           — saveProfile + selectProfile + setDir
+    18. init.js              — IIFE that runs LAST and bootstraps the page
+  See CLAUDE.md → "Renderer" for what lives where.
+-->
+<script src="js/state.js"></script>
+<script src="js/util.js"></script>
+<script src="js/catalogs.js"></script>
+<script src="js/driver-defaults.js"></script>
+<script src="js/driver-parsers.js"></script>
+<script src="js/calibration-defaults.js"></script>
+<!-- Gauge calibration defaults (one file per PN — sorted by manufacturer
+     then by digit prefix). Each file self-registers an entry into the
+     GAUGE_CALIBRATION_DEFAULTS map declared above. Add a new gauge by
+     dropping a file into src/js/gauges/ and listing it here. -->
+<script src="js/gauges/sim-100194-airspeed.js"></script>
+<script src="js/gauges/sim-100207-rpm.js"></script>
+<script src="js/gauges/sim-100207-rpm-v2.js"></script>
+<script src="js/gauges/sim-100216-ftit.js"></script>
+<script src="js/gauges/sim-100285-altimeter.js"></script>
+<script src="js/gauges/sim-100294-fuel-quantity.js"></script>
+<script src="js/gauges/sim-100295-fuel-flow.js"></script>
+<script src="js/gauges/sim-10033501-standby-adi.js"></script>
+<script src="js/gauges/sim-10058102-vvi.js"></script>
+<script src="js/gauges/sim-10058201-aoa.js"></script>
+<script src="js/gauges/sim-101078-cabin-altimeter.js"></script>
+<script src="js/gauges/sim-101079-compass.js"></script>
+<script src="js/gauges/sim-101081-altimeter-v2.js"></script>
+<script src="js/gauges/sim-101082-airspeed.js"></script>
+<script src="js/gauges/sim-101084-standby-adi.js"></script>
+<script src="js/gauges/sim-10108902-fuel-quantity.js"></script>
+<script src="js/gauges/sim-101088-nozzle.js"></script>
+<script src="js/gauges/sim-101090-epu-fuel.js"></script>
+<script src="js/gauges/sim-101091-oil-pressure.js"></script>
+<!-- Non-Simtek gauges (alphabetical by manufacturer) -->
+<script src="js/gauges/ami-9000262001-cabin-altimeter.js"></script>
+<script src="js/gauges/ami-900158001-hsi.js"></script>
+<script src="js/gauges/ami-9001584-fuel-quantity.js"></script>
+<script src="js/gauges/ami-900278002-adi.js"></script>
+<script src="js/gauges/astronautics-12871-adi.js"></script>
+<script src="js/gauges/gould-hs070d51341-compass.js"></script>
+<script src="js/gauges/lilbern-3239-fuel-flow.js"></script>
+<script src="js/gauges/lilbern-3321-rpm.js"></script>
+<script src="js/gauges/malwin-19562-ftit.js"></script>
+<script src="js/gauges/malwin-19563-lox.js"></script>
+<script src="js/gauges/malwin-19581-hydraulic-pressure.js"></script>
+<script src="js/gauges/malwin-246102-cabin-altimeter.js"></script>
+<script src="js/gauges/westin-521993-epu-fuel.js"></script>
+<!-- /gauges -->
+<script src="js/gauge-config-io.js"></script>
+<script src="js/chain.js"></script>
+<script src="js/save.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/tab-instruments.js"></script>
+<script src="js/tab-mappings.js"></script>
+<script src="js/tab-hardware.js"></script>
+<script src="js/tab-hardware-config.js"></script>
+<script src="js/tab-simsupport.js"></script>
+<script src="js/tab-calibration.js"></script>
+<script src="js/profile.js"></script>
+<script src="js/init.js"></script>
+</body>
+</html>

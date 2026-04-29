@@ -1,0 +1,2578 @@
+[
+  {
+    "pn": "10-0194",
+    "name": "Mach / airspeed indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100194HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Mach number",
+      "Airspeed (kts)"
+    ],
+    "analog_out": [
+      "Airspeed output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Airspeed_From_Sim",
+        "label": "Airspeed (kts)",
+        "kind": "analog"
+      },
+      {
+        "port": "Mach_From_Sim",
+        "label": "Mach number",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Airspeed needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Airspeed_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Mach scale wheel",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Mach_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100194"
+  },
+  {
+    "pn": "10-0207",
+    "name": "Tachometer (RPM)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100207HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "RPM %"
+    ],
+    "analog_out": [
+      "RPM output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "RPM_From_Sim",
+        "label": "RPM (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "RPM needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "RPM_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100207"
+  },
+  {
+    "pn": "10-0207_110",
+    "name": "Tachometer (RPM) v2",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100207_110HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "RPM %"
+    ],
+    "analog_out": [
+      "RPM output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "RPM_From_Sim",
+        "label": "RPM (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "RPM needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "RPM_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100207"
+  },
+  {
+    "pn": "10-0216",
+    "name": "FTIT indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100216HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "FTIT °C"
+    ],
+    "analog_out": [
+      "FTIT output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "FTIT_From_Sim",
+        "label": "FTIT (°C)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "FTIT needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FTIT_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100216"
+  },
+  {
+    "pn": "10-0285",
+    "name": "Altimeter",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100285HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Altitude MSL (ft)",
+      "Baro pressure (inHg)"
+    ],
+    "analog_out": [
+      "Alt fine SIN",
+      "Alt fine COS",
+      "Alt coarse SIN",
+      "Alt coarse COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Altitude_From_Sim",
+        "label": "Altitude (ft MSL)",
+        "kind": "analog"
+      },
+      {
+        "port": "Barometric_Pressure_From_Sim",
+        "label": "Baro pressure (inHg)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Altitude fine resolver (4,000 ft/rev)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Altitude_Fine_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Altitude_Fine_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Altitude coarse resolver (100,000 ft/rev)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Altitude_Coarse_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Altitude_Coarse_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100285"
+  },
+  {
+    "pn": "10-0294",
+    "name": "Fuel quantity indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100294HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "Total fuel (lbs)",
+      "Fore/right fuel (lbs)",
+      "Aft/left fuel (lbs)"
+    ],
+    "analog_out": [
+      "Fore/right output",
+      "Aft/left output",
+      "Counter output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Total_Fuel_From_Sim",
+        "label": "Total fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "ForeAndRight_Fuel_From_Sim",
+        "label": "Fore/right fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "AftAndLeft_Fuel_From_Sim",
+        "label": "Aft/left fuel (lbs)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fore/right needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FR_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Aft/left needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AL_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Total counter",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Counter_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100294"
+  },
+  {
+    "pn": "10-0295",
+    "name": "Fuel flow indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100295HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "Fuel flow (lbs/hr)"
+    ],
+    "analog_out": [
+      "Fuel flow output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Fuel_Flow_From_Sim",
+        "label": "Fuel flow (lbs/hr)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fuel flow needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Fuel_Flow_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "100295"
+  },
+  {
+    "pn": "10-0335-01",
+    "name": "Standby ADI",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100335015HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)"
+    ],
+    "analog_out": [
+      "Pitch SIN",
+      "Pitch COS",
+      "Roll SIN",
+      "Roll COS"
+    ],
+    "digital_in": [
+      "OFF flag"
+    ],
+    "digital_out": [
+      "OFF flag output"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Pitch resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Pitch_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Pitch_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "10033501"
+  },
+  {
+    "pn": "10-0581-02",
+    "name": "Vertical velocity indicator (VVI)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10058102HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "VVI (ft/min)"
+    ],
+    "analog_out": [
+      "VVI output"
+    ],
+    "digital_in": [
+      "OFF flag"
+    ],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Vertical_Velocity_From_Sim",
+        "label": "VVI (ft/min)",
+        "kind": "analog"
+      },
+      {
+        "port": "VVI_Power_Off_Flag_From_Sim",
+        "label": "VVI power-off flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "VVI needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Vertical_Velocity_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "10058102"
+  },
+  {
+    "pn": "10-0582-01",
+    "name": "Angle of attack indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10058201HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "AoA (deg)"
+    ],
+    "analog_out": [
+      "AoA output"
+    ],
+    "digital_in": [
+      "Power off flag"
+    ],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "AOA_From_Sim",
+        "label": "AoA (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "Power-off flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "AoA needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AOA_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "10058201"
+  },
+  {
+    "pn": "10-1078",
+    "name": "Cabin pressure altimeter",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101078HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Cabin pressure (ft)"
+    ],
+    "analog_out": [
+      "Cabin press output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "CabinAlt_From_Sim",
+        "label": "Cabin pressure altitude (ft)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Cabin pressure needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "CabinAlt_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101078"
+  },
+  {
+    "pn": "10-1079",
+    "name": "Standby compass",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101079HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Heading (deg)"
+    ],
+    "analog_out": [
+      "Compass SIN",
+      "Compass COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Compass__Magnetic_Heading_From_Sim",
+        "label": "Magnetic heading (deg)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Compass resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Compass__SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Compass__COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101079"
+  },
+  {
+    "pn": "10-1081",
+    "name": "Altimeter (v2)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101081HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Altitude MSL (ft)",
+      "Baro pressure (inHg)"
+    ],
+    "analog_out": [
+      "Alt fine SIN",
+      "Alt fine COS",
+      "Alt coarse output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Altitude_From_Sim",
+        "label": "Altitude (ft MSL)",
+        "kind": "analog"
+      },
+      {
+        "port": "Barometric_Pressure_From_Sim",
+        "label": "Baro pressure (inHg)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Altitude fine resolver (1,000 ft/rev)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Altitude_Fine_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Altitude_Fine_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Altitude coarse drum (-1,000 to 80,000 ft → ±10 V)",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Altitude_Coarse_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101081"
+  },
+  {
+    "pn": "10-1082",
+    "name": "Airspeed / Mach indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101082HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Mach number",
+      "Airspeed (kts)"
+    ],
+    "analog_out": [
+      "Mach output",
+      "Airspeed output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Airspeed_From_Sim",
+        "label": "Airspeed (kts)",
+        "kind": "analog"
+      },
+      {
+        "port": "Mach_From_Sim",
+        "label": "Mach number",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Airspeed needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Airspeed_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Mach scale wheel",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Mach_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101082"
+  },
+  {
+    "pn": "10-1084",
+    "name": "Standby ADI (v2)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101084HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)"
+    ],
+    "analog_out": [
+      "Pitch SIN",
+      "Pitch COS",
+      "Roll SIN",
+      "Roll COS"
+    ],
+    "digital_in": [
+      "OFF flag"
+    ],
+    "digital_out": [
+      "OFF flag output"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Pitch resolver (piecewise pitch°→angle°)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Pitch_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Pitch_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101084"
+  },
+  {
+    "pn": "10-1088",
+    "name": "Nozzle position indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101088HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "Nozzle position %"
+    ],
+    "analog_out": [
+      "Nozzle SIN",
+      "Nozzle COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Nozzle_Position_From_Sim",
+        "label": "Nozzle position (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Nozzle resolver (0..100% → 0..225°)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Nozzle_Position_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Nozzle_Position_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101088"
+  },
+  {
+    "pn": "10-1089-02",
+    "name": "Fuel quantity indicator (v2)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10108902HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "Total fuel (lbs)",
+      "Fore/right fuel (lbs)",
+      "Aft/left fuel (lbs)"
+    ],
+    "analog_out": [
+      "Fore/right output",
+      "Aft/left output",
+      "Counter output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Total_Fuel_From_Sim",
+        "label": "Total fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "ForeAndRight_Fuel_From_Sim",
+        "label": "Fore/right fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "AftAndLeft_Fuel_From_Sim",
+        "label": "Aft/left fuel (lbs)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fore/right needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FR_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Aft/left needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AL_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Total counter",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Counter_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "10108902"
+  },
+  {
+    "pn": "10-1090",
+    "name": "EPU fuel quantity indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101090HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "EPU fuel %"
+    ],
+    "analog_out": [
+      "EPU fuel output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "EPU_From_Sim",
+        "label": "EPU fuel (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "EPU fuel needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "EPU_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101090"
+  },
+  {
+    "pn": "10-1091",
+    "name": "Engine oil pressure indicator",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101091HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "Oil pressure (psi)"
+    ],
+    "analog_out": [
+      "Oil press SIN",
+      "Oil press COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Oil_Pressure_From_Sim",
+        "label": "Oil pressure (psi)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Oil pressure resolver (0..100 psi → 0..320°)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Oil_Pressure_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Oil_Pressure_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "101091"
+  },
+  {
+    "pn": "9000262001",
+    "name": "AMI P/N 90002620-01 - Cabin pressure altimeter",
+    "cls": "SimLinkup.HardwareSupport.AMI.AMI9000262001HardwareSupportModule",
+    "manufacturer": "AMI",
+    "cat": "flight",
+    "analog_in": [
+      "Cabin pressure altitude (ft)"
+    ],
+    "analog_out": [
+      "Cabin pressure output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Cabin_Pressure_Altitude_From_Sim",
+        "label": "Cabin pressure altitude (ft)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Cabin pressure needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Cabin_Pressure_Altitude_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "9000262001"
+  },
+  {
+    "pn": "9001580-01",
+    "name": "AMI P/N 9001580-01 - Horizontal situation indicator (HSI)",
+    "cls": "SimLinkup.HardwareSupport.AMI.AMI900158001HardwareSupportModule",
+    "manufacturer": "AMI",
+    "cat": "flight",
+    "analog_in": [
+      "Compass (deg)",
+      "Heading (deg)",
+      "Course (deg)",
+      "Bearing (deg)",
+      "DME (nm)",
+      "Course deviation (deg)",
+      "Course deviation limit (deg)"
+    ],
+    "analog_out": [
+      "Compass SIN/COS",
+      "Heading SIN/COS",
+      "Course SIN/COS",
+      "Bearing SIN/COS",
+      "Course deviation",
+      "DME ones SIN/COS",
+      "DME tens SIN/COS",
+      "DME hundreds SIN/COS"
+    ],
+    "digital_in": [
+      "OFF flag",
+      "Deviation flag",
+      "DME shutter flag",
+      "TO flag",
+      "FROM flag"
+    ],
+    "digital_out": [
+      "OFF flag",
+      "Deviation flag",
+      "DME shutter flag",
+      "TO flag",
+      "FROM flag"
+    ],
+    "inputPorts": [
+      {
+        "port": "Compass_From_Sim",
+        "label": "Compass (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Heading_From_Sim",
+        "label": "Heading (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_From_Sim",
+        "label": "Course (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Bearing_From_Sim",
+        "label": "Bearing (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "DME_From_Sim",
+        "label": "DME (nm)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_From_Sim",
+        "label": "Course deviation (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_Limit_From_Sim",
+        "label": "Course deviation limit",
+        "kind": "analog"
+      },
+      {
+        "port": "Off_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      },
+      {
+        "port": "Deviation_Flag_From_Sim",
+        "label": "Deviation flag",
+        "kind": "digital"
+      },
+      {
+        "port": "DME_Shutter_Flag_From_Sim",
+        "label": "DME shutter flag",
+        "kind": "digital"
+      },
+      {
+        "port": "TO_Flag_From_Sim",
+        "label": "TO flag",
+        "kind": "digital"
+      },
+      {
+        "port": "FROM_Flag_From_Sim",
+        "label": "FROM flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Compass resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Compass_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Compass_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Heading resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Heading_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Heading_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Course resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Course_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Course_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Bearing resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Bearing_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Bearing_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Course deviation needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Course_Deviation_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "DME ones digit resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "DME_x1_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "DME_x1_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "DME tens digit resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "DME_x10_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "DME_x10_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "DME hundreds digit resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "DME_x100_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "DME_x100_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "Deviation flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Deviation_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "DME shutter drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "DME_Shutter_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "TO flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "TO_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "FROM flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FROM_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "900158001"
+  },
+  {
+    "pn": "9001584",
+    "name": "AMI P/N 9001584 - Fuel quantity indicator",
+    "cls": "SimLinkup.HardwareSupport.AMI.AMI9001584HardwareSupportModule",
+    "manufacturer": "AMI",
+    "cat": "fuel",
+    "analog_in": [
+      "Total fuel (lbs)",
+      "Fore/right fuel (lbs)",
+      "Aft/left fuel (lbs)"
+    ],
+    "analog_out": [
+      "Fore/right output",
+      "Aft/left output",
+      "Counter output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Total_Fuel_From_Sim",
+        "label": "Total fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "ForeAndRight_Fuel_From_Sim",
+        "label": "Fore/right fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "AftAndLeft_Fuel_From_Sim",
+        "label": "Aft/left fuel (lbs)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fore/right needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FR_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Aft/left needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AL_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Total counter",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Counter_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "9001584"
+  },
+  {
+    "pn": "9002780-02",
+    "name": "AMI P/N 9002780-02 - Attitude director indicator (ADI)",
+    "cls": "SimLinkup.HardwareSupport.AMI.AMI900278002HardwareSupportModule",
+    "manufacturer": "AMI",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)",
+      "Horizontal command bar (deg)",
+      "Vertical command bar (deg)",
+      "Rate of turn (% deflection)"
+    ],
+    "analog_out": [
+      "Pitch output",
+      "Roll SIN/COS",
+      "Horizontal command bar",
+      "Vertical command bar",
+      "Rate of turn"
+    ],
+    "digital_in": [
+      "Show command bars",
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "digital_out": [
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Horizontal_Command_Bar_From_Sim",
+        "label": "Horizontal command bar (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Vertical_Command_Bar_From_Sim",
+        "label": "Vertical command bar (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Rate_Of_Turn_Indicator_From_Sim",
+        "label": "Rate of turn (% deflection)",
+        "kind": "analog"
+      },
+      {
+        "port": "Show_Command_Bars_From_Sim",
+        "label": "Show command bars",
+        "kind": "digital"
+      },
+      {
+        "port": "AUX_Flag_From_Sim",
+        "label": "AUX flag",
+        "kind": "digital"
+      },
+      {
+        "port": "GS_Flag_From_Sim",
+        "label": "GS flag",
+        "kind": "digital"
+      },
+      {
+        "port": "LOC_Flag_From_Sim",
+        "label": "LOC flag",
+        "kind": "digital"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Pitch needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Pitch_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Horizontal command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Horizontal_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Vertical command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Vertical_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Rate of turn needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Rate_Of_Turn_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "AUX flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AUX_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "GS flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "GS_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "LOC flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "LOC_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "900278002"
+  },
+  {
+    "pn": "12871",
+    "name": "Astronautics P/N 12871 - Attitude director indicator (ADI)",
+    "cls": "SimLinkup.HardwareSupport.Astronautics.Astronautics12871HardwareSupportModule",
+    "manufacturer": "Astronautics",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)",
+      "Horizontal command bar (% defl)",
+      "Vertical command bar (% defl)",
+      "Rate of turn (% defl)",
+      "Inclinometer (% defl)"
+    ],
+    "analog_out": [
+      "Pitch SIN/COS",
+      "Roll SIN/COS",
+      "Horizontal command bar",
+      "Vertical command bar",
+      "Rate of turn",
+      "Inclinometer"
+    ],
+    "digital_in": [
+      "Show command bars",
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "digital_out": [
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Horizontal_Command_Bar_From_Sim",
+        "label": "Horizontal command bar (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Vertical_Command_Bar_From_Sim",
+        "label": "Vertical command bar (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Rate_Of_Turn_Indicator_From_Sim",
+        "label": "Rate of turn (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Inclinometer_From_Sim",
+        "label": "Inclinometer (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Show_Command_Bars_From_Sim",
+        "label": "Show command bars",
+        "kind": "digital"
+      },
+      {
+        "port": "AUX_Flag_From_Sim",
+        "label": "AUX flag",
+        "kind": "digital"
+      },
+      {
+        "port": "GS_Flag_From_Sim",
+        "label": "GS flag",
+        "kind": "digital"
+      },
+      {
+        "port": "LOC_Flag_From_Sim",
+        "label": "LOC flag",
+        "kind": "digital"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Pitch resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Pitch_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Pitch_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Horizontal command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Horizontal_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Vertical command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Vertical_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Rate of turn needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Rate_Of_Turn_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Inclinometer needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Inclinometer_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "AUX flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AUX_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "GS flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "GS_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "LOC flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "LOC_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "12871"
+  },
+  {
+    "pn": "3239",
+    "name": "Lilbern M/N 3239 - F-16A fuel flow indicator",
+    "cls": "SimLinkup.HardwareSupport.Lilbern.Lilbern3239HardwareSupportModule",
+    "manufacturer": "Lilbern",
+    "cat": "fuel",
+    "analog_in": [
+      "Fuel flow (lbs/hr)"
+    ],
+    "analog_out": [
+      "Fuel flow output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Fuel_Flow_Pounds_Per_Hour_From_Sim",
+        "label": "Fuel flow (lbs/hr)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fuel flow needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Fuel_Flow_Pounds_Per_Hour_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "3239"
+  },
+  {
+    "pn": "3321",
+    "name": "Lilbern M/N 3321 - Tachometer (RPM)",
+    "cls": "SimLinkup.HardwareSupport.Lilbern.Lilbern3321HardwareSupportModule",
+    "manufacturer": "Lilbern",
+    "cat": "engine",
+    "analog_in": [
+      "RPM (%)"
+    ],
+    "analog_out": [
+      "RPM SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "RPM_From_Sim",
+        "label": "RPM (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "RPM resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "RPM_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "RPM_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "3321"
+  },
+  {
+    "pn": "1956-2",
+    "name": "Malwin P/N 1956-2 - FTIT indicator",
+    "cls": "SimLinkup.HardwareSupport.Malwin.Malwin19562HardwareSupportModule",
+    "manufacturer": "Malwin",
+    "cat": "engine",
+    "analog_in": [
+      "FTIT (°C)"
+    ],
+    "analog_out": [
+      "FTIT SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "FTIT_From_Sim",
+        "label": "FTIT (°C)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "FTIT resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "FTIT_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "FTIT_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "19562"
+  },
+  {
+    "pn": "1956-3",
+    "name": "Malwin P/N 1956-3 - Liquid oxygen quantity indicator",
+    "cls": "SimLinkup.HardwareSupport.Malwin.Malwin19563HardwareSupportModule",
+    "manufacturer": "Malwin",
+    "cat": "fuel",
+    "analog_in": [
+      "LOX quantity (%)"
+    ],
+    "analog_out": [
+      "LOX SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "LOX_From_Sim",
+        "label": "LOX quantity (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "LOX resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "LOX_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "LOX_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "19563"
+  },
+  {
+    "pn": "19581",
+    "name": "Malwin P/N 19581 - Hydraulic pressure indicator (A & B)",
+    "cls": "SimLinkup.HardwareSupport.Malwin.Malwin19581HardwareSupportModule",
+    "manufacturer": "Malwin",
+    "cat": "engine",
+    "analog_in": [
+      "Hydraulic pressure A (psi)",
+      "Hydraulic pressure B (psi)"
+    ],
+    "analog_out": [
+      "Hyd A SIN/COS",
+      "Hyd B SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Hydraulic_Pressure_A_From_Sim",
+        "label": "Hydraulic pressure A (psi)",
+        "kind": "analog"
+      },
+      {
+        "port": "Hydraulic_Pressure_B_From_Sim",
+        "label": "Hydraulic pressure B (psi)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Hyd pressure A resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Hydraulic_Pressure_A_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Hydraulic_Pressure_A_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Hyd pressure B resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Hydraulic_Pressure_B_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Hydraulic_Pressure_B_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "19581"
+  },
+  {
+    "pn": "246102",
+    "name": "Malwin P/N 246102 - Cabin pressure altimeter",
+    "cls": "SimLinkup.HardwareSupport.Malwin.Malwin246102HardwareSupportModule",
+    "manufacturer": "Malwin",
+    "cat": "flight",
+    "analog_in": [
+      "Cabin pressure altitude (ft)"
+    ],
+    "analog_out": [
+      "Cabin press SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Cabin_Pressure_Altitude_From_Sim",
+        "label": "Cabin pressure altitude (ft)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Cabin pressure resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Cabin_Pressure_Altitude_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Cabin_Pressure_Altitude_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "246102"
+  },
+  {
+    "pn": "521993",
+    "name": "Westin P/N 521993 - EPU fuel quantity indicator",
+    "cls": "SimLinkup.HardwareSupport.Westin.Westin521993HardwareSupportModule",
+    "manufacturer": "Westin",
+    "cat": "fuel",
+    "analog_in": [
+      "EPU fuel (%)"
+    ],
+    "analog_out": [
+      "EPU fuel output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "EPU_From_Sim",
+        "label": "EPU fuel (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "EPU fuel needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "EPU_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "521993"
+  },
+  {
+    "pn": "HS070D51341",
+    "name": "Gould P/N HS070D5134-1 - Standby compass",
+    "cls": "SimLinkup.HardwareSupport.Gould.GouldHS070D51341HardwareSupportModule",
+    "manufacturer": "Gould",
+    "cat": "flight",
+    "analog_in": [
+      "Magnetic heading (deg)"
+    ],
+    "analog_out": [
+      "Compass SIN/COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Compass__Magnetic_Heading_From_Sim",
+        "label": "Magnetic heading (deg)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Compass resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Compass__SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Compass__COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "HS070D51341"
+  },
+  {
+    "pn": "HenkF16ADISupportBoard",
+    "name": "Henk F-16 ADI support board (drives ARU-50/A primary ADI)",
+    "cls": "SimLinkup.HardwareSupport.Henk.ADI.HenkF16ADISupportBoardHardwareSupportModule",
+    "manufacturer": "Henk",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)",
+      "Horizontal command bar",
+      "Vertical command bar",
+      "Rate of turn"
+    ],
+    "analog_out": [
+      "Pitch → SDI",
+      "Roll → SDI",
+      "Horizontal GS bar → SDI",
+      "Vertical GS bar → SDI",
+      "Rate of turn → SDI"
+    ],
+    "digital_in": [
+      "Command bars visible",
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag",
+      "Pitch/roll enable input",
+      "GS power input",
+      "RT/flags power input"
+    ],
+    "digital_out": [
+      "AUX flag → SDI",
+      "GS flag → SDI",
+      "LOC flag → SDI",
+      "Pitch/roll enable → SDI",
+      "GS power → SDI",
+      "RT/flags power → SDI"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Horizontal_Command_Bar_From_Sim",
+        "label": "Horizontal command bar (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Vertical_Command_Bar_From_Sim",
+        "label": "Vertical command bar (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Rate_Of_Turn_Indicator_From_Sim",
+        "label": "Rate of turn (% deflection)",
+        "kind": "analog"
+      },
+      {
+        "port": "Command_Bars_Visible_Flag_From_Sim",
+        "label": "Command bars visible",
+        "kind": "digital"
+      },
+      {
+        "port": "AUX_Flag_From_Sim",
+        "label": "AUX flag",
+        "kind": "digital"
+      },
+      {
+        "port": "GS_Flag_From_Sim",
+        "label": "GS flag",
+        "kind": "digital"
+      },
+      {
+        "port": "LOC_Flag_From_Sim",
+        "label": "LOC flag",
+        "kind": "digital"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      },
+      {
+        "port": "ENABLE_PITCH_AND_ROLL_Input",
+        "label": "Pitch/roll enable input",
+        "kind": "digital"
+      },
+      {
+        "port": "GS_POWER_Input",
+        "label": "GS power input",
+        "kind": "digital"
+      },
+      {
+        "port": "RT_AND_FLAGS_POWER_Input",
+        "label": "RT/flags power input",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Pitch → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Pitch_To_SDI",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Roll → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Roll_To_SDI",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Horizontal GS bar → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Horizontal_GS_Bar_To_SDI",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Vertical GS bar → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Vertical_GS_Bar_To_SDI",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Rate of turn → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Rate_Of_Turn_To_SDI",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "AUX flag → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AUX_Flag_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "GS flag → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "GS_Flag_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "LOC flag → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "LOC_Flag_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "Pitch/roll enable → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "ENABLE_PITCH_AND_ROLL_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "GS power → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "GS_POWER_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "RT/flags power → SDI",
+        "ports": [
+          {
+            "role": "value",
+            "port": "RT_AND_FLAGS_POWER_To_SDI",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "HenkF16ADISupportBoard"
+  },
+  {
+    "pn": "HenkieF16Altimeter",
+    "name": "Henkie F-16 altimeter drive board",
+    "cls": "SimLinkup.HardwareSupport.Henk.Altimeter.HenkieF16AltimeterHardwareSupportModule",
+    "manufacturer": "Henkie",
+    "cat": "flight",
+    "analog_in": [
+      "Altitude (ft MSL)",
+      "Baro pressure (inHg)"
+    ],
+    "analog_out": [],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Altitude_From_Sim",
+        "label": "Altitude (ft MSL)",
+        "kind": "analog"
+      },
+      {
+        "port": "Barometric_Pressure_From_Sim",
+        "label": "Baro pressure (inHg)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [],
+    "digitPrefix": "HenkieF16Altimeter"
+  },
+  {
+    "pn": "HenkieF16FuelFlow",
+    "name": "Henkie F-16 fuel flow indicator drive board",
+    "cls": "SimLinkup.HardwareSupport.Henk.FuelFlow.HenkieF16FuelFlowIndicatorHardwareSupportModule",
+    "manufacturer": "Henkie",
+    "cat": "fuel",
+    "analog_in": [
+      "Fuel flow (lbs/hr)"
+    ],
+    "analog_out": [],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "FuelFlow_From_Sim",
+        "label": "Fuel flow (lbs/hr)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [],
+    "digitPrefix": "HenkieF16FuelFlow"
+  },
+  {
+    "pn": "Henk_F16_HSI_Board1",
+    "name": "Henk F-16 HSI board 1 (heading, bearing, range counter drive)",
+    "cls": "SimLinkup.HardwareSupport.Henk.HSI.Board1.HenkF16HSIBoard1HardwareSupportModule",
+    "manufacturer": "Henk",
+    "cat": "flight",
+    "analog_in": [
+      "Magnetic heading",
+      "Desired heading",
+      "Bearing",
+      "Course",
+      "Course deviation",
+      "Course deviation limit",
+      "Range"
+    ],
+    "analog_out": [],
+    "digital_in": [
+      "OFF flag",
+      "Deviation flag",
+      "Range invalid flag",
+      "TO flag",
+      "FROM flag"
+    ],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Magnetic_Heading_From_Sim",
+        "label": "Magnetic heading (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Desired_Heading_From_Sim",
+        "label": "Desired heading (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Bearing_From_Sim",
+        "label": "Bearing (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_From_Sim",
+        "label": "Course (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_From_Sim",
+        "label": "Course deviation (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_Limit_From_Sim",
+        "label": "Course deviation limit",
+        "kind": "analog"
+      },
+      {
+        "port": "Range_From_Sim",
+        "label": "Range (nm)",
+        "kind": "analog"
+      },
+      {
+        "port": "Off_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      },
+      {
+        "port": "Deviation_Flag_From_Sim",
+        "label": "Course deviation flag",
+        "kind": "digital"
+      },
+      {
+        "port": "Range_Invalid_Flag_From_Sim",
+        "label": "Range invalid flag",
+        "kind": "digital"
+      },
+      {
+        "port": "TO_Flag_From_Sim",
+        "label": "TO flag",
+        "kind": "digital"
+      },
+      {
+        "port": "FROM_Flag_From_Sim",
+        "label": "FROM flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [],
+    "digitPrefix": "Henk_F16_HSI_Board1"
+  },
+  {
+    "pn": "Henk_F16_HSI_Board2",
+    "name": "Henk F-16 HSI board 2 (course deviation indicator + course arrow drive)",
+    "cls": "SimLinkup.HardwareSupport.Henk.HSI.Board2.HenkF16HSIBoard2HardwareSupportModule",
+    "manufacturer": "Henk",
+    "cat": "flight",
+    "analog_in": [
+      "Magnetic heading",
+      "Desired heading",
+      "Bearing",
+      "Course",
+      "Course deviation",
+      "Course deviation limit",
+      "Range"
+    ],
+    "analog_out": [],
+    "digital_in": [
+      "OFF flag",
+      "Deviation invalid flag",
+      "Range invalid flag",
+      "TO flag",
+      "FROM flag"
+    ],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Magnetic_Heading_From_Sim",
+        "label": "Magnetic heading (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Desired_Heading_From_Sim",
+        "label": "Desired heading (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Bearing_From_Sim",
+        "label": "Bearing (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_From_Sim",
+        "label": "Course (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_From_Sim",
+        "label": "Course deviation (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Course_Deviation_Limit_From_Sim",
+        "label": "Course deviation limit",
+        "kind": "analog"
+      },
+      {
+        "port": "Range_From_Sim",
+        "label": "Range (nm)",
+        "kind": "analog"
+      },
+      {
+        "port": "Off_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      },
+      {
+        "port": "Deviation_Flag_From_Sim",
+        "label": "Course deviation flag",
+        "kind": "digital"
+      },
+      {
+        "port": "Range_Invalid_Flag_From_Sim",
+        "label": "Range invalid flag",
+        "kind": "digital"
+      },
+      {
+        "port": "TO_Flag_From_Sim",
+        "label": "TO flag",
+        "kind": "digital"
+      },
+      {
+        "port": "FROM_Flag_From_Sim",
+        "label": "FROM flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [],
+    "digitPrefix": "Henk_F16_HSI_Board2"
+  }
+]

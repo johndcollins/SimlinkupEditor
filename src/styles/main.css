@@ -1,0 +1,1886 @@
+:root {
+  --bg: #f8f8f6;
+  --bg-card: #ffffff;
+  --bg-secondary: #f1f0eb;
+  --bg-info: #e6f1fb;
+  --bg-success: #e1f5ee;
+  --bg-warning: #faeeda;
+  --bg-danger: #fcebeb;
+  --text: #1a1a18;
+  --text-secondary: #5f5e5a;
+  --text-info: #185fa5;
+  --text-success: #0f6e56;
+  --text-danger: #a32d2d;
+  --border: rgba(0,0,0,0.1);
+  --border-hover: rgba(0,0,0,0.25);
+  --border-info: #85b7eb;
+  --border-success: #5dcaa5;
+  --border-danger: #f09595;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font-mono: 'Consolas', 'Courier New', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Titlebar ── */
+.titlebar {
+  background: var(--bg-card);
+  border-bottom: 0.5px solid var(--border);
+  padding: 0 16px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.titlebar-left { display: flex; align-items: center; gap: 12px; }
+.app-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.app-sub { font-size: 11px; color: var(--text-secondary); }
+.titlebar-right { display: flex; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
+
+/* ── Buttons ── */
+button {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border-hover);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .1s;
+}
+button:hover { background: var(--bg-secondary); }
+button:active { transform: scale(0.98); }
+button:disabled { opacity: .4; cursor: default; }
+.btn-primary { border-color: var(--border-info); color: var(--text-info); }
+.btn-primary:hover { background: var(--bg-info); }
+.btn-success { border-color: var(--border-success); color: var(--text-success); }
+.btn-success:hover { background: var(--bg-success); }
+.btn-danger { border-color: var(--border-danger); color: var(--text-danger); }
+.btn-danger:hover { background: var(--bg-danger); }
+.btn-sm { font-size: 11px; padding: 3px 9px; }
+
+/* ── Inputs ── */
+input[type=text], input[type=search], select, textarea {
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border-hover);
+  background: var(--bg-card);
+  color: var(--text);
+  font-family: inherit;
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #378add;
+  box-shadow: 0 0 0 2px #b5d4f433;
+}
+textarea { resize: vertical; width: 100%; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; }
+
+/* ── Layout ── */
+.main-layout {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  background: var(--bg-card);
+  border-right: 0.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-head {
+  padding: 12px 14px 10px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-title { font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; }
+.profile-list { flex: 1; overflow-y: auto; padding: 6px; }
+.profile-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 2px;
+  gap: 6px;
+}
+.profile-item:hover { background: var(--bg-secondary); }
+.profile-item.active { background: var(--bg-info); }
+.profile-item-info { flex: 1; min-width: 0; }
+.profile-item-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-item.active .profile-item-name { color: var(--text-info); }
+.profile-item-meta { font-size: 10px; color: var(--text-secondary); margin-top: 1px; }
+.profile-item.active .profile-item-meta { color: #378add; }
+.default-badge { font-size: 9px; padding: 1px 5px; border-radius: 8px; background: var(--bg-success); color: var(--text-success); font-weight: 500; flex-shrink: 0; }
+.broken-badge  { font-size: 9px; padding: 1px 5px; border-radius: 8px; background: var(--bg-danger);  color: var(--text-danger);  font-weight: 500; flex-shrink: 0; cursor: help; }
+.new-profile-area { padding: 10px 10px 12px; border-top: 0.5px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+.new-profile-area input { width: 100%; }
+
+/* ── Dir picker banner ── */
+.dir-banner {
+  background: var(--bg-warning);
+  border-bottom: 0.5px solid #ef9f27;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dir-banner-text { font-size: 12px; color: #633806; }
+.dir-banner.danger { background: var(--bg-danger); border-bottom-color: var(--border-danger); }
+.dir-banner.danger .dir-banner-text { color: var(--text-danger); }
+.dir-path { font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 2px; }
+
+/* ── Editor panel ── */
+.editor { display: flex; flex-direction: column; overflow: hidden; }
+.editor-head {
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+.editor-title { font-size: 15px; font-weight: 500; }
+.editor-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.editor-actions { display: flex; gap: 6px; align-items: center; }
+.editor-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+/* ── Tabs ── */
+/* Sticky to the top of the scrolling .editor-body so the tab row stays
+   reachable while scrolling through long Mappings tabs. The negative top
+   offset matches the pull-up margin (so the bar lands flush with the
+   editor-body's content edge while sticking). */
+.tabs-nav {
+  display: flex;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-card);
+  margin: -16px -16px 16px;
+  padding: 0 16px;
+  position: sticky;
+  top: -16px;
+  z-index: 5;
+}
+.tab-btn {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -0.5px;
+  border-radius: 0;
+}
+.tab-btn:hover { color: var(--text); background: transparent; }
+.tab-btn.active { color: var(--text-info); border-bottom-color: #378add; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+/* Inline issue badges shown next to a tab title (e.g. "Signal mappings (93) ⚠ 5 ✗ 2"). */
+.tab-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 500;
+  margin-left: 5px;
+  cursor: help;
+  vertical-align: 1px;
+}
+.tab-badge-broken   { background: var(--bg-danger);  color: var(--text-danger); }
+.tab-badge-conflict { background: var(--bg-danger);  color: var(--text-danger); }
+.tab-badge-warn     { background: var(--bg-warning); color: #633806; }
+
+/* ── Instrument catalog ── */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-bar input { flex: 1; min-width: 160px; }
+.inst-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.inst-card {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 11px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.inst-card.added { border-color: var(--border-success); background: var(--bg-success); }
+.inst-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px; }
+.inst-pn { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); }
+.inst-card.added .inst-pn { color: #0f6e56; }
+.inst-name { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; }
+.inst-card.added .inst-name { color: #085041; }
+.inst-signals { display: flex; gap: 3px; flex-wrap: wrap; }
+.sig-pill { font-size: 10px; padding: 1px 6px; border-radius: 8px; font-weight: 500; }
+.pill-a { background: var(--bg-info); color: #0c447c; }
+.pill-d { background: var(--bg-success); color: #085041; }
+.mfr-group { margin-top: 12px; }
+.mfr-group:first-of-type { margin-top: 0; }
+.mfr-group > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  padding-bottom: 3px;
+  border-bottom: 0.5px solid var(--border);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mfr-group > summary::-webkit-details-marker { display: none; }
+.mfr-group > summary::before {
+  content: '▶';
+  font-size: 9px;
+  transition: transform 0.1s;
+  color: var(--text-secondary);
+}
+.mfr-group[open] > summary::before { transform: rotate(90deg); }
+.mfr-group > .inst-grid { margin-top: 6px; }
+.mfr-count-pill {
+  background: var(--bg-info);
+  color: #0c447c;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.mfr-count-pill.has-added { background: var(--bg-success); color: #085041; }
+
+/* ── Active instruments ── */
+.active-inst-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  background: var(--bg-card);
+}
+.active-icon {
+  width: 32px; height: 32px;
+  border-radius: 6px;
+  background: var(--bg-info);
+  color: var(--text-info);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  text-align: center;
+  line-height: 1.2;
+}
+.active-info { flex: 1; min-width: 0; }
+.active-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.active-pn { font-size: 10px; color: var(--text-secondary); font-family: var(--font-mono); }
+.active-sigs { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 3px; }
+
+/* ── Mappings tab — per-instrument cards ── */
+.instrument-card {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+/* Mappings tab toolbar: intro text on the left, expand/collapse-all on the right. */
+.mappings-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.mappings-toolbar-text { font-size: 12px; color: var(--text-secondary); flex: 1; min-width: 0; }
+.mappings-toolbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* Header is now a <summary>; hide the browser's default disclosure marker
+   and the focus ring (we add our own click affordance via the chevron). */
+.instrument-card-head {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.instrument-card-head::-webkit-details-marker { display: none; }
+.instrument-card-head::marker                 { content: ''; }
+.instrument-card-head:hover                   { filter: brightness(0.97); }
+.instrument-card-headline { flex: 1; min-width: 0; }
+/* Chevron rotates 90° when the parent <details> is open. */
+.instrument-card-chevron {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  text-align: center;
+  transition: transform .12s ease-out;
+  flex-shrink: 0;
+}
+details[open] > .instrument-card-head > .instrument-card-chevron {
+  transform: rotate(90deg);
+}
+/* When collapsed, drop the head's bottom border so it reads as a single
+   pill rather than a bordered band with no body. */
+details:not([open]) > .instrument-card-head { border-bottom: none; }
+/* Per-status header tints. Amber for "needs attention" (none / partial),
+   green for fully wired, red for broken. Empty (no ports) keeps the
+   default neutral background. */
+.instrument-card-head-none     { background: var(--bg-warning); }
+.instrument-card-head-partial  { background: var(--bg-warning); }
+.instrument-card-head-complete { background: var(--bg-success); }
+.instrument-card-head-broken   { background: var(--bg-danger);  }
+.instrument-card-title { font-size: 13px; font-weight: 500; color: var(--text); }
+.instrument-card-pn   { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 2px; }
+.map-section-head {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 10px 14px 4px;
+}
+.map-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 18px minmax(220px, 1.4fr);
+  gap: 8px;
+  align-items: center;
+  padding: 4px 14px;
+}
+.map-row-label   { min-width: 0; }
+.map-row-name    { font-size: 12px; color: var(--text); }
+.map-row-port    { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); }
+.map-row-arrow   { text-align: center; color: var(--text-secondary); }
+.map-row-control select { width: 100%; font-size: 11px; padding: 4px 6px; }
+/* Source signal not found in any declared SimSupport's catalog. Amber, not
+   red, so users distinguish this from the duplicate-channel conflict. */
+.map-row-invalid {
+  background: var(--bg-warning);
+  border-radius: var(--radius);
+  margin: 0 10px;
+  padding: 4px 4px;
+}
+.map-row-invalid-hint {
+  font-size: 10px;
+  color: #633806;
+  padding: 0 14px 4px;
+  cursor: help;
+}
+
+/* Per-gauge completion pill in the card header. */
+.completion-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}
+/* Pill classes mirror the header status. The header already carries the
+   background tint, so the pill itself stays subtle (lighter, no outline)
+   to avoid double-emphasising the same signal. */
+.completion-pill-empty    { background: rgba(0,0,0,0.05); color: var(--text-secondary); }
+.completion-pill-none     { background: rgba(255,255,255,0.6); color: #633806; }
+.completion-pill-partial  { background: rgba(255,255,255,0.6); color: #633806; }
+.completion-pill-complete { background: rgba(255,255,255,0.6); color: var(--text-success); }
+.completion-pill-broken   { background: rgba(255,255,255,0.6); color: var(--text-danger); }
+
+.map-output-group {
+  padding: 6px 14px 10px;
+  border-top: 0.5px dashed var(--border);
+}
+.map-output-group:first-child { border-top: none; }
+.map-output-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+.map-output-group-title { font-size: 12px; font-weight: 500; color: var(--text); }
+.map-output-group-kind  { font-size: 10px; color: var(--text-secondary); font-style: italic; }
+.map-channel-row,
+.map-channel-header {
+  display: grid;
+  grid-template-columns: 28px minmax(160px, 1fr) 14px 1fr 80px 100px;
+  gap: 6px;
+  align-items: center;
+}
+.map-channel-row    { padding: 3px 0; }
+.map-channel-header { padding: 0 0 2px; }
+.map-channel-header > div {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.map-channel-role  { font-size: 11px; font-weight: 500; color: var(--text-info); text-align: center; }
+.map-channel-port  { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-channel-arrow { color: var(--text-secondary); text-align: center; }
+.map-channel-row select { font-size: 11px; padding: 3px 5px; min-width: 0; }
+.map-channel-row select:disabled { opacity: 0.4; }
+.map-channel-row-conflict {
+  background: var(--bg-danger);
+  border-radius: var(--radius);
+  margin: 0 -4px;
+  padding: 3px 4px;
+}
+.map-channel-conflict {
+  font-size: 10px;
+  color: var(--text-danger);
+  /* Indent past the role + port columns so the message lines up with the
+     driver/board/output dropdowns it's about. */
+  padding: 0 0 4px calc(28px + 6px + 160px + 6px + 14px + 6px);
+  cursor: help;
+}
+
+/* ── Hardware tab ── */
+.hardware-status-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.hardware-status-auto    { background: var(--bg-info);    color: var(--text-info); }
+.hardware-status-user    { background: var(--bg-success); color: var(--text-success); }
+.hardware-status-missing { background: var(--bg-warning); color: #633806; }
+.hardware-status-none    { background: var(--bg-secondary); color: var(--text-secondary); }
+
+.hardware-channel-list {
+  padding: 4px 14px 6px;
+  display: grid;
+  gap: 2px;
+}
+.hardware-channel-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  font-size: 11px;
+  align-items: baseline;
+}
+.hardware-channel-addr {
+  font-family: var(--font-mono);
+  color: var(--text-info);
+  font-weight: 500;
+}
+.hardware-channel-source { color: var(--text); }
+
+.hardware-config-details summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  user-select: none;
+}
+.hardware-config-details summary:hover { color: var(--text); }
+.hardware-config-xml {
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: pre;
+  overflow: auto;
+  max-height: 320px;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+.hardware-config-missing {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.hw-device-block {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 0.5px dashed var(--border);
+}
+.hw-device-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* ── Hardware Config tab ── */
+.hwconfig-card {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.hwconfig-card-head {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.hwconfig-card-head::-webkit-details-marker { display: none; }
+.hwconfig-card-head::marker                 { content: ''; }
+.hwconfig-card-head:hover                   { filter: brightness(0.97); }
+.hwconfig-card[open] > .hwconfig-card-head { border-bottom: 0.5px solid var(--border); }
+.hwconfig-card-chevron {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  text-align: center;
+  transition: transform .12s ease-out;
+  flex-shrink: 0;
+}
+.hwconfig-card[open] > .hwconfig-card-head > .hwconfig-card-chevron {
+  transform: rotate(90deg);
+}
+.hwconfig-card-headline { flex: 1; min-width: 0; }
+.hwconfig-card-title { font-size: 13px; font-weight: 500; color: var(--text); }
+.hwconfig-card-sub   { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+.hwconfig-card-body  { padding: 12px 14px 14px; }
+
+.hwconfig-device-section { margin-bottom: 14px; }
+.hwconfig-device-section:last-child { margin-bottom: 0; }
+.hwconfig-device-section + .hwconfig-device-section {
+  border-top: 0.5px dashed var(--border);
+  padding-top: 14px;
+}
+.hwconfig-device-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.hwconfig-device-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+.hwconfig-section-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 10px 0 6px;
+}
+
+/* Board-level calibration: 4 fields side-by-side, wraps gracefully on narrow widths.
+   Use align-items: end so the input controls bottom-align even when neighbouring
+   label text wraps to a different number of lines (e.g. "Limit threshold (0 = disabled,
+   max 63)" wraps to 2 lines while "Mode" stays on 1 — without this the field with
+   the long label gets pushed below its neighbours). */
+.hwconfig-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+.hwconfig-board-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.hwconfig-board-grid input,
+.hwconfig-board-grid select {
+  font-size: 12px;
+  padding: 4px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--text);
+}
+
+/* Per-channel grid: 5 columns. Index column is narrow + monospace; the four
+   value columns are equal-width number inputs. */
+.hwconfig-channel-table {
+  display: grid;
+  gap: 0;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.hwconfig-channel-row {
+  display: grid;
+  grid-template-columns: 56px repeat(4, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 3px 8px;
+  border-bottom: 0.5px solid var(--border);
+}
+.hwconfig-channel-row:last-child { border-bottom: none; }
+.hwconfig-channel-row:nth-child(even) { background: var(--bg-secondary); }
+.hwconfig-channel-header {
+  background: var(--bg-secondary) !important;
+  border-bottom: 0.5px solid var(--border);
+  padding: 4px 8px;
+}
+.hwconfig-channel-header > div {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.hwconfig-channel-idx {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-info);
+  font-weight: 500;
+}
+.hwconfig-channel-row input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 5px;
+  width: 100%;
+  text-align: right;
+}
+
+/* ── Hardware Config — HenkSDI card ── */
+/* Channel list inside the SDI card. One row per output channel; the
+   calibration block (when present) appears below the head row, indented. */
+.hwconfig-sdi-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hwconfig-sdi-channel {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: var(--bg-card);
+}
+.hwconfig-sdi-channel-head {
+  display: grid;
+  grid-template-columns: 110px 100px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.hwconfig-sdi-channel-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-info);
+}
+.hwconfig-channel-mode-select {
+  font-size: 11px;
+  padding: 2px 5px;
+}
+/* Static "PWM" label for PWM_OUT — mode dropdown is hidden for that channel.
+   Match the visual weight of the dropdown so the rows align. */
+.hwconfig-channel-mode-static {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 2px 5px;
+}
+.hwconfig-sdi-channel-initial {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.hwconfig-sdi-channel-initial input {
+  flex: 1;
+  max-width: 100px;
+  font-size: 11px;
+  padding: 2px 5px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--text);
+  text-align: right;
+}
+
+/* Calibration breakpoint table — sub-block under a PWM channel. */
+.hwconfig-cal-block {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 0.5px dashed var(--border);
+}
+.hwconfig-cal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.hwconfig-cal-title {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  font-weight: 500;
+}
+.hwconfig-cal-empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 3px 0;
+}
+.hwconfig-cal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.hwconfig-cal-row, .hwconfig-cal-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr 32px;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 6px;
+  border-bottom: 0.5px solid var(--border);
+}
+.hwconfig-cal-row:last-child { border-bottom: none; }
+.hwconfig-cal-row:nth-child(even) { background: var(--bg-secondary); }
+.hwconfig-cal-header {
+  background: var(--bg-secondary);
+}
+.hwconfig-cal-header > div {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.hwconfig-cal-row input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 5px;
+  width: 100%;
+  text-align: right;
+}
+
+/* ── Hardware Config — ArduinoSeat seat-outputs list ── */
+/* The outputs list is a vertical stack of self-contained cards. Each card
+   bundles ID + FORCE/TYPE/MIN/MAX + motor checkboxes + per-motor speeds
+   into one visually-distinct chunk. */
+.hwconfig-ardseat-outputs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.hwconfig-ardseat-output {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: var(--bg-card);
+}
+/* Outputs with duplicate IDs (or empty IDs) get a soft red tint so the
+   warning badge is reinforced visually. */
+.hwconfig-ardseat-output-dup {
+  background: var(--bg-danger);
+  border-color: var(--border-danger);
+}
+.hwconfig-ardseat-output-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.hwconfig-ardseat-id {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.hwconfig-ardseat-dup-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.6);
+  color: var(--text-danger);
+  font-weight: 500;
+  cursor: help;
+  white-space: nowrap;
+}
+.hwconfig-ardseat-output-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 6px;
+}
+.hwconfig-ardseat-output-row:last-child { margin-bottom: 0; }
+.hwconfig-ardseat-output-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.hwconfig-ardseat-output-row input[type=number],
+.hwconfig-ardseat-output-row input[type=text],
+.hwconfig-ardseat-output-row select {
+  font-size: 11px;
+  padding: 3px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--text);
+}
+/* Checkbox-style label for motor-bit toggles: horizontal layout, normal
+   casing (not the uppercase the field-labels above use). */
+.hwconfig-ardseat-checkbox {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-weight: normal !important;
+  font-size: 11px !important;
+  color: var(--text) !important;
+}
+
+/* ── Hardware Config — TeensyEWMU outputs list ── */
+/* Compact row layout: ID input takes most of the width, Invert checkbox in
+   the middle, remove button on the right. Stacked vertically with a small
+   gap so the list reads densely. */
+.hwconfig-tewmu-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.hwconfig-tewmu-row {
+  display: grid;
+  grid-template-columns: 1fr auto 32px;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.hwconfig-tewmu-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 6px;
+}
+.hwconfig-tewmu-invert {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ── Toast ── */
+#toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1a1a18;
+  color: #f8f8f6;
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  opacity: 0;
+  transition: opacity .2s;
+  pointer-events: none;
+  z-index: 999;
+}
+#toast.show { opacity: 1; }
+
+/* ── Empty / utility ── */
+.empty { padding: 2rem; text-align: center; color: var(--text-secondary); }
+.sep { height: 0.5px; background: var(--border); margin: .75rem 0; }
+.section-label { font-size: 11px; font-weight: 500; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.status-msg { font-size: 11px; color: var(--text-secondary); }
+.status-ok { color: var(--text-success); }
+.status-err { color: var(--text-danger); }
+
+/* ── Calibration tab ── */
+/* Card pattern mirrors Hardware Config (collapsible <details> with a coloured
+   header) but with the per-status header tints from the Mappings tab. */
+.tab-badge-edited { background: var(--bg-info); color: var(--text-info); }
+
+.calibration-card {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.calibration-card-head {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.calibration-card-head::-webkit-details-marker { display: none; }
+.calibration-card-head::marker                 { content: ''; }
+.calibration-card-head:hover                   { filter: brightness(0.97); }
+.calibration-card[open] > .calibration-card-head { border-bottom: 0.5px solid var(--border); }
+.calibration-card-chevron {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  text-align: center;
+  transition: transform .12s ease-out;
+  flex-shrink: 0;
+}
+.calibration-card[open] > .calibration-card-head > .calibration-card-chevron {
+  transform: rotate(90deg);
+}
+.calibration-card-headline { flex: 1; min-width: 0; }
+.calibration-card-title    { font-size: 13px; font-weight: 500; color: var(--text); }
+.calibration-card-pn       { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); margin-top: 2px; }
+.calibration-card-body     { padding: 12px 14px 14px; }
+/* Per-status header tints. 'default' stays neutral; 'edited' picks up the
+   info-blue used elsewhere for "user-modified" state; 'warn' uses the
+   amber from the Mappings tab; 'no-defaults' stays neutral. */
+.calibration-card-head-default     { background: var(--bg-secondary); }
+.calibration-card-head-edited      { background: var(--bg-info); }
+.calibration-card-head-warn        { background: var(--bg-warning); }
+.calibration-card-head-no-defaults { background: var(--bg-secondary); }
+
+.calibration-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: help;
+}
+.calibration-pill-default     { background: rgba(255,255,255,0.6); color: var(--text-secondary); }
+.calibration-pill-edited      { background: rgba(255,255,255,0.6); color: var(--text-info); }
+.calibration-pill-warn        { background: rgba(255,255,255,0.6); color: #633806; }
+.calibration-pill-no-defaults { background: rgba(0,0,0,0.05);     color: var(--text-secondary); font-style: italic; }
+
+.calibration-channel-section { margin-bottom: 14px; }
+.calibration-channel-section:last-child { margin-bottom: 0; }
+.calibration-channel-section + .calibration-channel-section {
+  border-top: 0.5px dashed var(--border);
+  padding-top: 14px;
+}
+.calibration-channel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.calibration-channel-id   { font-size: 12px; font-family: var(--font-mono); color: var(--text); }
+.calibration-channel-kind { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Breakpoint table: 4 columns — index, input, volts, remove. */
+.calibration-bp-table {
+  display: grid;
+  gap: 0;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.calibration-bp-row {
+  display: grid;
+  grid-template-columns: 40px 1fr 1fr 32px;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 8px;
+  border-bottom: 0.5px solid var(--border);
+}
+.calibration-bp-row:last-child  { border-bottom: none; }
+.calibration-bp-row:nth-child(even) { background: var(--bg-secondary); }
+.calibration-bp-header {
+  background: var(--bg-secondary) !important;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 4px 8px;
+}
+.calibration-bp-idx {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  text-align: right;
+}
+.calibration-bp-row input[type="number"] {
+  font-size: 12px;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+}
+.calibration-bp-remove {
+  padding: 1px 6px;
+  font-size: 12px;
+  line-height: 1;
+}
+.calibration-bp-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+/* Trim grid: 2 columns side-by-side; matches the Hardware Config board grid
+   layout style for visual consistency across tabs. */
+.calibration-trim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  align-items: end;
+}
+.calibration-trim-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.calibration-trim-grid input {
+  font-size: 12px;
+  padding: 4px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.calibration-stub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 8px 4px;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Calibration tab — light-theme widgets
+   ──────────────────────────────────────────────────────────────────────────
+   The instrument-panel widget vocabulary from the legacy calibration.html
+   sketch (sliders, transfer-curve SVG, color-coded `kind` tags, validation
+   banner) ported to the editor's existing light palette so the Calibration
+   tab reads consistently with the Hardware Config / Mappings / SimSupport
+   tabs. Uses the editor's --bg-* / --text-* / --border / --text-info tokens
+   throughout — no per-tab palette overrides.
+   ────────────────────────────────────────────────────────────────────── */
+.calibration-card-body {
+  background: var(--bg-card);
+  color: var(--text);
+  padding: 16px 16px 18px;
+}
+
+.calibration-card-body .calibration-channel-section {
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.calibration-card-body .calibration-channel-section:last-child { margin-bottom: 0; }
+.calibration-card-body .calibration-channel-section + .calibration-channel-section {
+  /* Override the dashed divider from earlier styles — we use full cards now. */
+  border-top: 0.5px solid var(--border);
+  padding-top: 14px;
+}
+.calibration-card-body .calibration-channel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 9px;
+  border-bottom: 0.5px solid var(--border);
+}
+.calibration-card-body .calibration-channel-id {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Color-coded "kind" tag — light-palette versions of the original sketch.
+   Each kind keeps its hue family but with light backgrounds and darker text
+   so they read on the cream/white of the rest of the editor. */
+.cal-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.cal-tag-piecewise          { background: rgba(0,168,130,0.10);  color: #0f6e56; border: 0.5px solid rgba(0,168,130,0.30); }
+.cal-tag-linear             { background: rgba(59,130,246,0.10); color: #185fa5; border: 0.5px solid rgba(59,130,246,0.30); }
+.cal-tag-resolver           { background: rgba(168,85,247,0.10); color: #6b21a8; border: 0.5px solid rgba(168,85,247,0.30); }
+.cal-tag-piecewise_resolver { background: rgba(168,85,247,0.10); color: #6b21a8; border: 0.5px dashed rgba(168,85,247,0.50); }
+.cal-tag-multi_resolver     { background: rgba(245,158,11,0.12); color: #92400e; border: 0.5px solid rgba(245,158,11,0.35); }
+.cal-tag-cross_coupled      { background: rgba(239,68,68,0.10);  color: #a32d2d; border: 0.5px solid rgba(239,68,68,0.30); }
+.cal-tag-digital_invert     { background: rgba(100,116,139,0.10); color: #475569; border: 0.5px solid rgba(100,116,139,0.30); }
+.cal-tag-legacy             { background: rgba(100,116,139,0.10); color: #475569; border: 0.5px dashed rgba(100,116,139,0.40); }
+
+/* Legacy baro compensation block — 10-0285 only. Read-only display of the
+   four bare baro fields some older config files carry. Rendered as a
+   collapsed <details> at the bottom of the card so it doesn't visually
+   compete with the active calibration channels above. */
+.calibration-legacy-baro > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.calibration-legacy-baro > summary::-webkit-details-marker { display: none; }
+.calibration-legacy-baro > summary::marker                 { content: ''; }
+.calibration-legacy-baro > summary::before {
+  content: '▸';
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.1s ease;
+}
+.calibration-legacy-baro[open] > summary::before { transform: rotate(90deg); }
+.calibration-legacy-baro-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  row-gap: 4px;
+  column-gap: 12px;
+  font-size: 12px;
+}
+.calibration-legacy-baro-row { display: contents; }
+.calibration-legacy-baro-label { color: var(--text-secondary); }
+.calibration-legacy-baro-value {
+  font-family: var(--font-mono);
+  color: var(--text);
+  text-align: right;
+}
+.calibration-legacy-baro-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Read-only piecewise table inside the piecewise_resolver editor.
+   Three columns: row#, input, angle. Tucked inside a <details> disclosure
+   so the dial preview gets the visual focus. */
+.calibration-piecewise-table-disclosure {
+  margin-top: 8px;
+  padding: 6px 0 8px;
+  border-top: 0.5px dashed var(--border);
+}
+.calibration-piecewise-table-disclosure > summary {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  list-style: none;
+  padding: 4px 0;
+}
+.calibration-piecewise-table-disclosure > summary::-webkit-details-marker { display: none; }
+.calibration-piecewise-table-disclosure > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  color: var(--text-secondary);
+  transition: transform .12s ease-out;
+}
+.calibration-piecewise-table-disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+.calibration-piecewise-table {
+  margin-top: 6px;
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.calibration-piecewise-row {
+  display: grid;
+  grid-template-columns: 40px 90px 1fr 80px 32px;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 0.5px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.calibration-piecewise-row:last-child  { border-bottom: none; }
+.calibration-piecewise-row:nth-child(even) { background: var(--bg-secondary); }
+.calibration-piecewise-header {
+  background: var(--bg-secondary) !important;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  padding: 5px 10px;
+}
+.calibration-piecewise-idx {
+  color: var(--text-secondary);
+  text-align: right;
+}
+.calibration-piecewise-cell {
+  color: var(--text);
+}
+
+/* Help text shown above a block of fields ("what these knobs do, when to
+   reach for them"). Subtle but readable — small, secondary colour, with
+   slight inset so it visually belongs to the section it precedes. */
+.cal-help-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 4px 0 8px;
+  grid-column: 1 / -1;  /* span full width when inside calibration-trim-grid */
+}
+
+/* Trim field — label text on top, slider + number on the bottom row.
+   Slider takes the flexible width; number is a fixed compact box on the
+   right. Matches the dual-control pattern used by piecewise breakpoint
+   rows. */
+.cal-trim-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cal-trim-controls {
+  display: grid;
+  grid-template-columns: 1fr 80px;
+  gap: 8px;
+  align-items: center;
+}
+.cal-trim-controls input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+}
+.cal-trim-controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-info);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 0 1px var(--border-info);
+  cursor: pointer;
+}
+.cal-trim-controls input[type="number"] {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 3px 6px;
+}
+
+/* Inline help — short note that follows a field label on the same line.
+   Lighter than the label itself, lowercase, shows the user what the field
+   actually does without needing to read the tooltip. */
+.cal-help-inline {
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+/* Editable variant of the piecewise table — input / angle cells are number
+   inputs instead of read-only text. Aligns with the breakpoint table in
+   the piecewise editor. */
+.calibration-piecewise-row-edit input[type="number"] {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.calibration-piecewise-row-edit input[type="number"]:focus {
+  border-color: var(--border-info);
+  box-shadow: 0 0 0 2px rgba(133,183,235,0.25);
+}
+
+/* Digital invert editor — single checkbox + helper text. */
+.calibration-digital-invert {
+  padding: 12px 8px;
+}
+.calibration-digital-invert label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.calibration-digital-invert input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+.cal-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* Transfer-curve SVG: light canvas, blue line + dots matching the editor's
+   info accent. Subtle drop-shadow for a small bit of depth without the
+   neon-glow look of the dark theme. */
+.cal-curve-wrap {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px 6px;
+  margin-bottom: 12px;
+}
+/* Aspect-locked transfer-curve preview. width:100% drives layout; the
+   400:140 aspect ratio (matching the viewBox) keeps the curve from
+   squashing on wide cards. max-height caps how tall it can grow on a
+   very wide screen so the chart doesn't take over the card. */
+.cal-curve-svg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 400 / 140;
+  max-height: 220px;
+  margin: 0 auto;
+}
+.cal-curve-axis     { stroke: var(--text-secondary); stroke-width: 1; opacity: .35; }
+.cal-curve-axis-tick{ stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
+.cal-curve-line     { stroke: #378add; stroke-width: 1.5; fill: none; }
+.cal-curve-dot      { fill: var(--text-info); stroke: var(--bg-card); stroke-width: 1.5; }
+.cal-curve-dot.warn { fill: #b45309; }
+.cal-curve-label    { fill: var(--text-secondary); font-family: var(--font-mono); font-size: 9px; }
+.cal-curve-zero     { stroke: var(--text-secondary); stroke-width: 1; stroke-dasharray: 3 3; opacity: .35; }
+
+/* Breakpoint table: 5-column grid (idx, input, volts-slider, volts-num, remove). */
+.calibration-card-body .calibration-bp-table {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.calibration-card-body .calibration-bp-row {
+  display: grid;
+  grid-template-columns: 32px 90px 1fr 80px 32px;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 10px;
+  border-bottom: 0.5px solid var(--border);
+  background: transparent;
+}
+.calibration-card-body .calibration-bp-row:last-child  { border-bottom: none; }
+.calibration-card-body .calibration-bp-row:nth-child(even) { background: var(--bg-secondary); }
+.calibration-card-body .calibration-bp-header {
+  background: var(--bg-secondary) !important;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+}
+.calibration-card-body .calibration-bp-idx {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+.calibration-card-body input[type="number"] {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+  outline: none;
+  transition: border-color .12s, box-shadow .12s;
+}
+.calibration-card-body input[type="number"]:focus {
+  border-color: var(--border-info);
+  box-shadow: 0 0 0 2px rgba(133,183,235,0.25);
+}
+.calibration-card-body input[type="number"].cal-warn-val {
+  border-color: #b45309;
+  color: #b45309;
+}
+
+/* Slider: light grey track + blue thumb (using the editor's --text-info
+   accent). No drop-shadow / glow — looks crisper on the light background. */
+.cal-slider-wrap { position: relative; display: flex; align-items: center; }
+.calibration-card-body input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+}
+.calibration-card-body input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-info);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 0 1px var(--border-info);
+  cursor: pointer;
+  transition: box-shadow .12s, transform .1s;
+}
+.calibration-card-body input[type="range"]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 3px rgba(133,183,235,0.35);
+  transform: scale(1.08);
+}
+.calibration-card-body input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.18);
+}
+
+/* Remove-row button: small, square, dimmed until hovered. */
+.calibration-card-body .calibration-bp-remove {
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius);
+  padding: 0;
+  width: 26px;
+  height: 22px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all .12s;
+}
+.calibration-card-body .calibration-bp-remove:hover:not(:disabled) {
+  border-color: var(--border-danger);
+  color: var(--text-danger);
+  background: var(--bg-danger);
+}
+.calibration-card-body .calibration-bp-remove:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* Action row beneath the table — uses the editor's existing primary-button
+   style for the "+ Add breakpoint" call-to-action. */
+.calibration-card-body .calibration-bp-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+.calibration-card-body .cal-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .12s;
+  font-family: inherit;
+}
+.calibration-card-body .cal-btn:hover { background: var(--bg-secondary); }
+.calibration-card-body .cal-btn-accent {
+  border-color: var(--border-info);
+  color: var(--text-info);
+}
+.calibration-card-body .cal-btn-accent:hover {
+  background: var(--bg-info);
+}
+
+/* Trim grid: per-channel zero-trim and gain-trim, two columns. */
+.calibration-card-body .calibration-trim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--border);
+  align-items: end;
+}
+.calibration-card-body .calibration-trim-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+/* Channel-kind stub (linear/resolver/multi_resolver/cross_coupled — no
+   editor yet). */
+.calibration-card-body .calibration-stub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 10px 4px;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+
+/* Validation warning banner inside a channel section. */
+.cal-warnings {
+  background: var(--bg-warning);
+  border: 0.5px solid rgba(245,158,11,0.4);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #92400e;
+  font-family: var(--font-mono);
+}
+.cal-warnings ul { margin: 4px 0 0 16px; padding: 0; }
+.cal-warnings li { margin-top: 2px; }
+
+/* Informational banner — non-warning context the user should read once
+   ("here's what's special about this channel") before editing. Shown for
+   cross-coupled piecewise channels where the volts aren't the literal
+   DAC output. Lighter visual weight than .cal-warnings (info-blue, not
+   amber) since this is context, not a correctable issue. */
+.cal-info-banner {
+  background: var(--bg-info);
+  border: 0.5px solid var(--border-info);
+  border-radius: var(--radius);
+  padding: 7px 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-info);
+  line-height: 1.5;
+}
+.cal-info-banner code {
+  background: rgba(255,255,255,0.5);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.cal-info-banner em { font-style: italic; }
+
+/* Resolver dial preview — replaces the older sin/cos curve chart. The dial
+   shows the gauge's mechanical sweep (arc from angleMin to angleMax) with
+   a needle at the scrub-slider's mapped angle. Convention: 0° points up,
+   angles increase clockwise. */
+.cal-dial-wrap {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 18px;
+  align-items: center;
+}
+.cal-dial-svg { display: block; width: 100%; height: 200px; }
+.cal-dial-arc {
+  fill: none;
+  stroke: #378add;
+  stroke-width: 4;
+  stroke-linecap: round;
+  opacity: .7;
+}
+.cal-dial-tick {
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+}
+.cal-dial-label {
+  fill: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+.cal-dial-needle {
+  stroke: var(--text-info);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.cal-dial-needle-hub {
+  fill: var(--text-info);
+}
+
+/* Scrub-slider panel beside the dial. Slider sits above its readout. */
+.cal-dial-scrub {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.cal-dial-scrub label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cal-dial-scrub input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--border);
+  outline: none;
+  cursor: pointer;
+}
+.cal-dial-scrub input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--text-info);
+  border: 2px solid var(--bg-card);
+  box-shadow: 0 0 0 1px var(--border-info);
+  cursor: pointer;
+}
+.cal-dial-scrub-readout {
+  font-size: 11px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.cal-dial-scrub-readout strong {
+  color: var(--text-info);
+  font-weight: 600;
+}
+
+/* Advanced disclosure for peakVolts + belowMinBehavior — keeps the noisy
+   knobs out of the main field grid for the common case. */
+.calibration-resolver-advanced {
+  margin-top: 8px;
+  padding: 6px 0 8px;
+  border-top: 0.5px dashed var(--border);
+}
+.calibration-resolver-advanced > summary {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  list-style: none;
+  padding: 4px 0;
+}
+.calibration-resolver-advanced > summary::-webkit-details-marker { display: none; }
+.calibration-resolver-advanced > summary::before {
+  content: '▸';
+  display: inline-block;
+  width: 12px;
+  color: var(--text-secondary);
+  transition: transform .12s ease-out;
+}
+.calibration-resolver-advanced[open] > summary::before {
+  transform: rotate(90deg);
+}
+.calibration-resolver-advanced[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* Per-channel trim sub-table (resolver pair: one row for sin, one for cos).
+   Two-column row: label on the left, fields on the right. Minimal so it
+   doesn't compete with the main transform grid above. */
+.calibration-resolver-trims {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--border);
+}
+.calibration-resolver-trims-head {
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+.calibration-trim-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 4px 0;
+}
+.calibration-trim-row:not(:last-child) {
+  border-bottom: 0.5px dashed var(--border);
+  margin-bottom: 4px;
+}
+.calibration-trim-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+.calibration-trim-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.calibration-trim-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+/* ── First-launch safety disclaimer overlay ─────────────────────────────── */
+/* Full-viewport blocking modal. Shown by init.js when the user hasn't yet
+   accepted the safety disclaimer. Refusing closes the app; accepting
+   persists the acceptance to settings.json so this is one-time per
+   machine/user. */
+#disclaimerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-family: var(--font-sans);
+}
+.disclaimer-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+  max-width: 640px;
+  width: 100%;
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+.disclaimer-title {
+  padding: 16px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg-warning);
+}
+.disclaimer-body {
+  padding: 16px 20px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.disclaimer-body p { margin: 0 0 10px 0; }
+.disclaimer-body p:last-child { margin-bottom: 0; }
+.disclaimer-body ul {
+  margin: 6px 0 12px 0;
+  padding-left: 20px;
+}
+.disclaimer-body li { margin-bottom: 4px; }
+.disclaimer-checkbox {
+  padding: 12px 20px;
+  font-size: 12px;
+  color: var(--text);
+  border-top: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  background: var(--bg-secondary);
+}
+.disclaimer-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+}
+.disclaimer-actions {
+  padding: 12px 20px;
+  border-top: 0.5px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: var(--bg-secondary);
+}
+.disclaimer-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
