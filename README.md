@@ -41,6 +41,10 @@ If you don't want to build anything, just grab the prebuilt installer:
 3. Run it. The installer extracts the editor and the calibration bridge
    into Program Files; live calibration works out of the box.
 
+> **New users:** see the [User Guide](docs/USER_GUIDE.md) for an
+> end-to-end walkthrough — from picking your `Content\Mapping` folder
+> through tuning a gauge with the live calibration sliders.
+
 > **Where to install SimLinkup itself.** SimLinkup keeps your profile,
 > mapping, and calibration files inside its own `Content\Mapping`
 > folder — and the editor needs to write to that folder every time you
@@ -53,6 +57,51 @@ If you don't want to build anything, just grab the prebuilt installer:
 > protected location after you pick a directory.
 
 The rest of this README is for contributors building from source.
+
+---
+
+## Compatibility — use the patched SimLinkup build
+
+The editor authors per-gauge calibration `.config` files using a
+generic schema (piecewise breakpoints, resolver tables, per-channel
+zero/gain trim). **The upstream `lightningstools` SimLinkup build
+does not yet load those files** — only two gauges (10-0285 altimeter
+and 10-0294 fuel) had `Load` implementations on the upstream side
+when this editor was first written, and they used different
+gauge-specific schemas.
+
+Until those changes land in upstream `lightningstools`, you need a
+patched SimLinkup build that knows how to read what the editor
+writes. We maintain that build in a fork:
+
+> 📦 **Patched SimLinkup MSI installer:**
+> [github.com/johndcollins/lightningstools/releases](https://github.com/johndcollins/lightningstools/releases)
+>
+> Download `SimLinkupSetup.msi` from the latest release and install it
+> over your existing SimLinkup install (or to a fresh location). Pair
+> it with this editor and the per-gauge calibration files round-trip
+> end-to-end.
+
+The fork adds:
+
+- A shared `Common.HardwareSupport.Calibration.GaugeCalibrationConfig`
+  base class supporting all four transform patterns
+  (linear / piecewise / resolver / multi-turn resolver) plus
+  per-channel zero/gain trim.
+- Per-gauge `*HardwareSupportModuleConfig.cs` classes for the 32
+  gauges with calibration support in the editor (Simtek, AMI,
+  Astronautics, Gould, Lilbern, Malwin, Westin).
+- Hot-reload via `FileSystemWatcher` so saving from the editor
+  updates the running gauge without a SimLinkup restart — useful for
+  iterative live calibration.
+- Several `ArduinoSeat` bug fixes so per-output force/type/motor/speed
+  fields actually take effect at runtime.
+
+**Source branch:**
+[`simlinkup-editor-support`](https://github.com/johndcollins/lightningstools/tree/simlinkup-editor-support)
+on the fork. The patches will eventually be PR'd back to upstream
+`lightningstools`; once they merge there and a release is cut, you'll
+be able to switch back to the upstream build.
 
 ---
 
