@@ -46,6 +46,10 @@ async function setDir(dir, save) {
   // Initialise all profiles as stubs
   profiles = names.map(n => ({ name: n, instruments: [], chain: emptyChain(), drivers: {}, simSupports: [], driverConfigsRaw: {}, gaugeConfigs: {}, gaugeConfigsRaw: {}, loaded: false }));
   activeIdx = null;
+  // Reset the editor pane — without this, the previously-selected profile's
+  // title, default badge, and tab DOM stay visible until the user clicks
+  // a profile in the new directory.
+  clearEditor();
   renderSidebar(); // show names immediately with 0/0 briefly
 
   // Eager-load all profiles in parallel

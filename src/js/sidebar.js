@@ -32,6 +32,26 @@ function renderSidebar() {
   });
 }
 
+// Reset the editor pane back to its initial "no profile selected" state.
+// Called from setDir() after the directory changes — without this, the
+// editor pane keeps showing the previously-selected profile's title,
+// metadata, default badge, and tab content from the old directory until
+// the user clicks a profile in the new directory's sidebar list. The
+// stale "default" badge in particular is misleading (it points at the
+// old directory's default profile, not the new one's).
+function clearEditor() {
+  document.getElementById('editorTitle').textContent = 'Select a profile';
+  document.getElementById('editorMeta').textContent = 'Create a new profile or select one from the list';
+  document.getElementById('editorDefaultBadge').style.display = 'none';
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('btnDelete').disabled = true;
+  const btnDefault = document.getElementById('btnDefault');
+  btnDefault.textContent = 'Set as default';
+  btnDefault.disabled = true;
+  document.getElementById('editorBody').innerHTML =
+    '<div class="empty">Select or create a profile to get started.</div>';
+}
+
 // ── Editor ───────────────────────────────────────────────────────────────────
 function renderDefaultStatus() {
   const p = activeIdx !== null ? profiles[activeIdx] : null;
