@@ -171,6 +171,13 @@ function cloneGaugeCalibrationDefault(pn) {
       if (typeof ch.unitsPerRevolution === 'number') cloned.unitsPerRevolution = ch.unitsPerRevolution;
       // digital_invert: single boolean field.
       if (typeof ch.invert === 'boolean') cloned.invert = ch.invert;
+      // Caged-rest behaviour for standby ADI resolver pairs (only the
+      // SIN side carries these). Carried verbatim so a clone keeps the
+      // editor's defaults; the user toggles cagedRestEnabled in the
+      // Calibration tab to opt in.
+      if (typeof ch.cagedRestEnabled === 'boolean') cloned.cagedRestEnabled = ch.cagedRestEnabled;
+      if (typeof ch.cagedRestRangeMinDegrees === 'number') cloned.cagedRestRangeMinDegrees = ch.cagedRestRangeMinDegrees;
+      if (typeof ch.cagedRestRangeMaxDegrees === 'number') cloned.cagedRestRangeMaxDegrees = ch.cagedRestRangeMaxDegrees;
       return cloned;
     }),
   };
@@ -239,6 +246,19 @@ function gaugeCalibrationIsEdited(pn, entry) {
     }
     if (typeof t.unitsPerRevolution === 'number' || typeof e.unitsPerRevolution === 'number') {
       if (!eq(e.unitsPerRevolution ?? t.unitsPerRevolution ?? 1, t.unitsPerRevolution ?? 1)) return true;
+    }
+    // Caged-rest behaviour. Compare the explicit on/off toggle and the
+    // optional min/max range. Only present on standby ADI SIN channels;
+    // every other channel skips this entire block (both sides have all
+    // three fields undefined).
+    if (typeof t.cagedRestEnabled === 'boolean' || typeof e.cagedRestEnabled === 'boolean') {
+      if ((e.cagedRestEnabled ?? t.cagedRestEnabled ?? false) !== (t.cagedRestEnabled ?? false)) return true;
+    }
+    if (typeof t.cagedRestRangeMinDegrees === 'number' || typeof e.cagedRestRangeMinDegrees === 'number') {
+      if (!eq(e.cagedRestRangeMinDegrees ?? t.cagedRestRangeMinDegrees ?? 0, t.cagedRestRangeMinDegrees ?? 0)) return true;
+    }
+    if (typeof t.cagedRestRangeMaxDegrees === 'number' || typeof e.cagedRestRangeMaxDegrees === 'number') {
+      if (!eq(e.cagedRestRangeMaxDegrees ?? t.cagedRestRangeMaxDegrees ?? 0, t.cagedRestRangeMaxDegrees ?? 0)) return true;
     }
   }
   return false;

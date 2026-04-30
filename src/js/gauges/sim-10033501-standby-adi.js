@@ -55,6 +55,13 @@ GAUGE_CALIBRATION_DEFAULTS['10-0335-01'] = Object.freeze({
       peakVolts: 10,
       zeroTrim: 0,
       gainTrim: 1,
+      // Caged-rest behaviour: when the OFF flag input is visible
+      // (gauge spinning down or unpowered), drive the synchro to a
+      // random rest angle within ±20° pitch. Opt-in (cagedRestEnabled
+      // defaults to false) so existing profiles are unchanged.
+      cagedRestEnabled: false,
+      cagedRestRangeMinDegrees: -20,
+      cagedRestRangeMaxDegrees:  20,
     },
     {
       id: '10033501_Pitch_COS_To_Instrument',
@@ -93,6 +100,10 @@ GAUGE_CALIBRATION_DEFAULTS['10-0335-01'] = Object.freeze({
       peakVolts: 10,
       zeroTrim: 0,
       gainTrim: 1,
+      // Caged-rest: ±40° roll. Opt-in.
+      cagedRestEnabled: false,
+      cagedRestRangeMinDegrees: -40,
+      cagedRestRangeMaxDegrees:  40,
     },
     {
       id: '10033501_Roll_COS_To_Instrument',

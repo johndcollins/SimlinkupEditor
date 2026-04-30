@@ -224,6 +224,31 @@ function renderGaugeConfigXml(pn, entry) {
       // gets cross-combined, not a direct DAC output."
       const coupledTo = ch.coupledTo || tplCh.coupledTo;
       if (coupledTo) lines.push(`      <CoupledTo>${escXml(coupledTo)}</CoupledTo>`);
+
+      // Caged-rest behaviour for standby ADI resolver pairs. Only emit
+      // when the user has opted in (CagedRestEnabled = true). The C#
+      // HSM defaults the range to ±20° pitch / ±40° roll when the
+      // min/max aren't explicit; we still emit them when the user
+      // edited a value so the file is self-describing. See
+      // GaugeChannelConfig.CagedRestEnabled in the C# schema.
+      const cagedEnabled = (typeof ch.cagedRestEnabled === 'boolean')
+        ? ch.cagedRestEnabled
+        : tplCh.cagedRestEnabled;
+      if (typeof cagedEnabled === 'boolean') {
+        lines.push(`      <CagedRestEnabled>${cagedEnabled ? 'true' : 'false'}</CagedRestEnabled>`);
+      }
+      const cagedMin = (typeof ch.cagedRestRangeMinDegrees === 'number')
+        ? ch.cagedRestRangeMinDegrees
+        : tplCh.cagedRestRangeMinDegrees;
+      if (typeof cagedMin === 'number') {
+        lines.push(`      <CagedRestRangeMinDegrees>${formatNum(cagedMin)}</CagedRestRangeMinDegrees>`);
+      }
+      const cagedMax = (typeof ch.cagedRestRangeMaxDegrees === 'number')
+        ? ch.cagedRestRangeMaxDegrees
+        : tplCh.cagedRestRangeMaxDegrees;
+      if (typeof cagedMax === 'number') {
+        lines.push(`      <CagedRestRangeMaxDegrees>${formatNum(cagedMax)}</CagedRestRangeMaxDegrees>`);
+      }
     }
     lines.push('    </Channel>');
   }
@@ -481,6 +506,21 @@ function parseGaugeConfigXml(xmlText, pn) {
     const zeroRaw = zeroEl ? Number((zeroEl.textContent || '').trim()) : NaN;
     const gainRaw = gainEl ? Number((gainEl.textContent || '').trim()) : NaN;
     const coupledTo = coupledEl ? (coupledEl.textContent || '').trim() : (tplCh.coupledTo || '');
+
+    // Caged-rest fields (only emitted by standby ADI resolver pairs;
+    // absent on every other gauge, in which case all three reads
+    // return NaN/null and the parsed entry simply doesn't carry them).
+    const cagedEnabledEl = el.querySelector(':scope > CagedRestEnabled');
+    const cagedMinEl     = el.querySelector(':scope > CagedRestRangeMinDegrees');
+    const cagedMaxEl     = el.querySelector(':scope > CagedRestRangeMaxDegrees');
+    let cagedRestEnabled;
+    if (cagedEnabledEl) {
+      const t = (cagedEnabledEl.textContent || '').trim().toLowerCase();
+      if (t === 'true' || t === 'false') cagedRestEnabled = (t === 'true');
+    }
+    const cagedMinRaw = cagedMinEl ? Number((cagedMinEl.textContent || '').trim()) : NaN;
+    const cagedMaxRaw = cagedMaxEl ? Number((cagedMaxEl.textContent || '').trim()) : NaN;
+
     const parsed = {
       id: tplCh.id,
       kind,
@@ -499,6 +539,9 @@ function parseGaugeConfigXml(xmlText, pn) {
     if (typeof unitsPerRevolution === 'number') parsed.unitsPerRevolution = unitsPerRevolution;
     if (typeof invert === 'boolean') parsed.invert = invert;
     if (coupledTo) parsed.coupledTo = coupledTo;
+    if (typeof cagedRestEnabled === 'boolean') parsed.cagedRestEnabled = cagedRestEnabled;
+    if (Number.isFinite(cagedMinRaw)) parsed.cagedRestRangeMinDegrees = cagedMinRaw;
+    if (Number.isFinite(cagedMaxRaw)) parsed.cagedRestRangeMaxDegrees = cagedMaxRaw;
     out.channels.push(parsed);
   }
 

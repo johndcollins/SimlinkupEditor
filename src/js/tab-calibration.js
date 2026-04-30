@@ -964,6 +964,74 @@ function formatTrimNum(n) {
   return v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '.0');
 }
 
+// Caged-rest controls — opt-in random rest angle behaviour for standby
+// ADI resolver pairs. Only rendered when the gauge template declares
+// the cage fields on its SIN channel (10-0335-01 and 10-1084 today).
+// Sits inside the resolver editor's Advanced disclosure alongside
+// peakVolts because most users won't touch it.
+//
+// Three controls:
+//   - Enable checkbox (cagedRestEnabled). Default off.
+//   - Range min / max (degrees). The C# HSM picks one random angle in
+//     this range at startup and drives sin/cos × peakVolts to it for
+//     as long as the OFF flag input stays TRUE. Min == Max disables
+//     randomness (fixed rest angle).
+function renderCagedRestFields(pn, channelIdx, tplCh, liveCh) {
+  // Only render when the gauge template opts in by declaring any cage
+  // field. Other resolver gauges (e.g. nozzle, RPM) skip this block
+  // entirely so the UI doesn't grow gauge-specific clutter.
+  const tplHas =
+    typeof tplCh.cagedRestEnabled === 'boolean' ||
+    typeof tplCh.cagedRestRangeMinDegrees === 'number' ||
+    typeof tplCh.cagedRestRangeMaxDegrees === 'number';
+  if (!tplHas) return '';
+
+  const enabled = (typeof liveCh.cagedRestEnabled === 'boolean')
+    ? liveCh.cagedRestEnabled
+    : !!tplCh.cagedRestEnabled;
+  const minVal = (typeof liveCh.cagedRestRangeMinDegrees === 'number')
+    ? liveCh.cagedRestRangeMinDegrees
+    : (tplCh.cagedRestRangeMinDegrees ?? -20);
+  const maxVal = (typeof liveCh.cagedRestRangeMaxDegrees === 'number')
+    ? liveCh.cagedRestRangeMaxDegrees
+    : (tplCh.cagedRestRangeMaxDegrees ?? 20);
+
+  return `
+    <div class="cal-help-text" style="margin-top:12px">
+      <strong>Caged-rest behaviour.</strong> When the OFF flag input is
+      visible (gauge spinning down or unpowered), drive the synchro to a
+      random angle within this range — modelling a real standby ADI's
+      gimbal-locked random rest position. The angle is picked once when
+      SimLinkup starts; recaging mid-session keeps the same rest. Set
+      Min and Max to the same value for a fixed (non-random) rest
+      angle. Default: opt-out (off) so existing profiles are unchanged.
+    </div>
+    <label class="cal-trim-field">
+      <span>Enable random caged rest <span class="cal-help-inline">— off by default. Toggle on to model the gyro-at-rest behaviour.</span></span>
+      <div class="cal-trim-controls">
+        <input type="checkbox" ${enabled ? 'checked' : ''}
+               onchange="setCalibrationResolverField('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}','cagedRestEnabled',this.checked)"
+               title="Enable random rest angle when the OFF flag input is visible."/>
+      </div>
+    </label>
+    <label class="cal-trim-field">
+      <span>Rest range min (°) <span class="cal-help-inline">— most-negative rest angle the ball can settle at.</span></span>
+      <div class="cal-trim-controls">
+        <input type="number" step="1" value="${formatTrimNum(minVal)}"
+               onchange="setCalibrationResolverField('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}','cagedRestRangeMinDegrees',this.value)"
+               title="Minimum rest angle in degrees. Defaults: -20 (pitch) / -40 (roll)."/>
+      </div>
+    </label>
+    <label class="cal-trim-field">
+      <span>Rest range max (°) <span class="cal-help-inline">— most-positive rest angle the ball can settle at.</span></span>
+      <div class="cal-trim-controls">
+        <input type="number" step="1" value="${formatTrimNum(maxVal)}"
+               onchange="setCalibrationResolverField('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}','cagedRestRangeMaxDegrees',this.value)"
+               title="Maximum rest angle in degrees. Defaults: +20 (pitch) / +40 (roll)."/>
+      </div>
+    </label>`;
+}
+
 // Synchro drive amplitude block — the "peak volts" knob on resolver-style
 // channels. Buried in Advanced because almost no user should touch it.
 // Slider 0..10 V + number input mirror, same dual-control pattern as the
@@ -1671,6 +1739,7 @@ function renderPiecewiseResolverPairEditor(pn, channelIdx, tplCh, liveCh, partne
         <summary>Advanced</summary>
         <div class="calibration-trim-grid">
           ${renderPeakVoltsField(pn, channelIdx, tplCh.id, peakVolts)}
+          ${renderCagedRestFields(pn, channelIdx, tplCh, liveCh)}
         </div>
       </details>
       <div class="calibration-resolver-trims">
@@ -1844,6 +1913,7 @@ function renderMultiResolverPairEditor(pn, channelIdx, tplCh, liveCh, partnerTpl
         <summary>Advanced</summary>
         <div class="calibration-trim-grid">
           ${renderPeakVoltsField(pn, channelIdx, tplCh.id, peakVolts)}
+          ${renderCagedRestFields(pn, channelIdx, tplCh, liveCh)}
         </div>
       </details>
       <div class="calibration-resolver-trims">
@@ -2358,8 +2428,10 @@ function setResolverAdvancedOpen(pn, channelId, open) {
 // Always re-renders so the SVG preview, header summary, and validation
 // banner all refresh.
 function setCalibrationResolverField(pn, channelIdx, sinChannelId, field, value) {
-  const numericFields = ['inputMin', 'inputMax', 'peakVolts'];
+  const numericFields = ['inputMin', 'inputMax', 'peakVolts',
+                         'cagedRestRangeMinDegrees', 'cagedRestRangeMaxDegrees'];
   const stringFields = ['belowMinBehavior'];
+  const boolFields = ['cagedRestEnabled'];
   const p = profiles[activeIdx];
   const entry = ensureGaugeEntry(p, pn);
   if (!entry) return;
@@ -2372,6 +2444,8 @@ function setCalibrationResolverField(pn, channelIdx, sinChannelId, field, value)
   } else if (stringFields.indexOf(field) >= 0) {
     if (value !== 'clamp' && value !== 'zero') return;
     ch[field] = value;
+  } else if (boolFields.indexOf(field) >= 0) {
+    ch[field] = !!value;
   } else {
     return;
   }
