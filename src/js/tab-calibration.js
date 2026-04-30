@@ -968,6 +968,17 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
   const bps = liveCh.breakpoints || tplCh.breakpoints || [];
   const channelKey = `${pn}-${channelIdx}`;
 
+  // Output unit metadata — defaults to ±10 V volts so existing gauges are
+  // unaffected. DAC-output gauges (Henkie family) override outputUnit/Min/Max.
+  const meta = piecewiseOutputMeta(tplCh);
+  const numTitle = meta.unit === 'dac'
+    ? `Output ${meta.label} (clamped to ${meta.min}..${meta.max} by the gauge HSM)`
+    : `Output ${meta.label.toLowerCase()} (clamped to ±10 V by the gauge HSM)`;
+  const sliderTitle = meta.unit === 'dac'
+    ? `Drag to set output ${meta.label} (clamped to ${meta.min}..${meta.max} by the gauge HSM)`
+    : `Drag to set output ${meta.label.toLowerCase()} (clamped to ±10 V by the gauge HSM)`;
+  const numHeader = meta.unit === 'dac' ? `${meta.label} (num)` : 'V (num)';
+
   // Per-channel validation banner (non-blocking — values still save).
   const validation = validatePiecewiseChannel(liveCh);
   const warningBanner = validation.warnings.length
@@ -984,8 +995,8 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
   const coupledTo = liveCh.coupledTo || tplCh.coupledTo;
   const coupledBanner = coupledTo
     ? `<div class="cal-info-banner">
-         <strong>Cross-coupled:</strong> The volts in this table are a
-         <em>reference voltage</em>, not the final DAC output. SimLinkup
+         <strong>Cross-coupled:</strong> The ${escHtml(meta.label.toLowerCase())} in this table are a
+         <em>reference value</em>, not the final DAC output. SimLinkup
          combines them with the current
          <code>${escHtml(coupledTo)}</code> output to position this gauge's
          needle relative to the other channel.
@@ -994,12 +1005,13 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
 
   const headerRow = `
     <div class="calibration-bp-row calibration-bp-header">
-      <div>#</div><div>Input</div><div>Volts</div><div>V (num)</div><div></div>
+      <div>#</div><div>Input</div><div>${escHtml(meta.label)}</div><div>${escHtml(numHeader)}</div><div></div>
     </div>`;
 
   const rows = bps.map((bp, idx) => {
     const rowKey = `cal-row-${channelKey}-${idx}`;
-    const voltClamped = Math.max(-10, Math.min(10, Number(bp.volts) || 0));
+    const rawVal = Number(bp[meta.attr]) || 0;
+    const valClamped = Math.max(meta.min, Math.min(meta.max, rawVal));
     return `
     <div class="calibration-bp-row" id="${rowKey}">
       <div class="calibration-bp-idx">${idx + 1}</div>
@@ -1007,15 +1019,15 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
              onchange="setCalibrationBreakpoint('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${idx},'input',this.value)"
              title="Input value (units depend on the gauge — % RPM, feet, knots, …)"/>
       <div class="cal-slider-wrap">
-        <input type="range" min="-10" max="10" step="0.001" value="${voltClamped}"
+        <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${valClamped}"
                id="${rowKey}-slider"
                oninput="setCalibrationVoltsLive('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${idx},this.value)"
-               title="Drag to set output volts (clamped to ±10 V by the gauge HSM)"/>
+               title="${escHtml(sliderTitle)}"/>
       </div>
-      <input type="number" step="any" min="-10" max="10" value="${formatNum(bp.volts)}"
+      <input type="number" step="any" min="${meta.min}" max="${meta.max}" value="${formatNum(bp[meta.attr])}"
              id="${rowKey}-num"
-             onchange="setCalibrationBreakpoint('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${idx},'volts',this.value)"
-             title="Output volts (clamped to ±10 V by the gauge HSM)"/>
+             onchange="setCalibrationBreakpoint('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${idx},'${meta.attr}',this.value)"
+             title="${escHtml(numTitle)}"/>
       <button class="calibration-bp-remove"
               ${bps.length <= 2 ? 'disabled title="At least 2 rows required"' : `onclick="removeCalibrationBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}',${idx})"`}>−</button>
     </div>`;
@@ -1034,7 +1046,7 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
         <svg class="cal-curve-svg" id="cal-curve-${channelKey}"
              viewBox="0 0 400 140"
              xmlns="http://www.w3.org/2000/svg">
-          ${renderCalibrationCurveSvg(bps)}
+          ${renderCalibrationCurveSvg(bps, meta)}
         </svg>
       </div>
       <div class="calibration-bp-table">
@@ -1044,9 +1056,11 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
       <div class="calibration-bp-actions">
         <button class="cal-btn cal-btn-accent" onclick="addCalibrationBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}')">+ Add breakpoint</button>
       </div>
-      <div class="calibration-trim-grid">
-        ${renderTrimFieldsBlock(pn, tplCh.id, liveCh, /*compact*/ false)}
-      </div>
+      ${meta.unit === 'volts'
+        ? `<div class="calibration-trim-grid">
+             ${renderTrimFieldsBlock(pn, tplCh.id, liveCh, /*compact*/ false)}
+           </div>`
+        : ''}
     </div>`;
 }
 
@@ -1061,12 +1075,16 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
 // Coordinate system: x = input range mapped to [pad, 400-pad];
 //                    y = volts (-10..+10) mapped to [pad, 140-pad] (inverted
 //                    so +10 V is at the top).
-function renderCalibrationCurveSvg(bps) {
+function renderCalibrationCurveSvg(bps, meta) {
   if (!bps || bps.length < 2) {
     return `<text x="200" y="70" text-anchor="middle" class="cal-curve-label">need ≥2 breakpoints</text>`;
   }
+  // Default unit is volts (-10..+10) so existing callers (linear/resolver
+  // previews) work unchanged. Piecewise channels with `outputUnit:'dac'`
+  // pass meta to drive the y-axis range and the value attribute name.
+  const m = meta || { unit: 'volts', min: -10, max: 10, label: 'V', attr: 'volts' };
   const W = 400, H = 140;
-  const padL = 28, padR = 8, padT = 8, padB = 16;
+  const padL = 32, padR = 8, padT = 8, padB = 16;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
 
@@ -1074,9 +1092,10 @@ function renderCalibrationCurveSvg(bps) {
   const minIn = Math.min(...inputs);
   const maxIn = Math.max(...inputs);
   const inSpan = (maxIn - minIn) || 1;
+  const ySpan = (m.max - m.min) || 1;
 
   const xOf = i => padL + ((Number(i) - minIn) / inSpan) * innerW;
-  const yOf = v => padT + ((10 - Math.max(-10, Math.min(10, Number(v)))) / 20) * innerH;
+  const yOf = v => padT + ((m.max - Math.max(m.min, Math.min(m.max, Number(v)))) / ySpan) * innerH;
 
   // Detect monotonicity issues — flag dots in amber where input <= prev.
   const flagged = new Array(bps.length).fill(false);
@@ -1084,29 +1103,37 @@ function renderCalibrationCurveSvg(bps) {
     if (!(Number(bps[i].input) > Number(bps[i-1].input))) flagged[i] = true;
   }
 
-  // Frame: zero-volt baseline (dashed blue), bottom axis, left axis.
-  const zeroY = yOf(0);
+  // Frame: zero-output baseline (dashed blue), bottom axis, left axis. The
+  // baseline only draws when 0 falls inside [min, max] — for DAC ranges
+  // like 0..4095 it sits at the bottom anyway and would just overlap the
+  // axis, so we suppress it.
   const parts = [];
   parts.push(`<line class="cal-curve-axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}"/>`);
   parts.push(`<line class="cal-curve-axis" x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}"/>`);
-  parts.push(`<line class="cal-curve-zero" x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}"/>`);
-  // Y-axis tick labels at +10, 0, -10.
-  parts.push(`<text x="${padL - 4}" y="${padT + 7}"  text-anchor="end" class="cal-curve-label">+10</text>`);
-  parts.push(`<text x="${padL - 4}" y="${zeroY + 3}" text-anchor="end" class="cal-curve-label">0</text>`);
-  parts.push(`<text x="${padL - 4}" y="${H - padB + 1}" text-anchor="end" class="cal-curve-label">-10</text>`);
+  if (m.min < 0 && m.max > 0) {
+    const zeroY = yOf(0);
+    parts.push(`<line class="cal-curve-zero" x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}"/>`);
+    parts.push(`<text x="${padL - 4}" y="${zeroY + 3}" text-anchor="end" class="cal-curve-label">0</text>`);
+  }
+  // Y-axis tick labels at top/bottom. Volts gets a +/- prefix; DAC just shows the raw count.
+  const topLbl = m.unit === 'volts' ? `+${formatNum(m.max)}` : formatNum(m.max);
+  const botLbl = m.unit === 'volts' ? formatNum(m.min) : formatNum(m.min);
+  parts.push(`<text x="${padL - 4}" y="${padT + 7}"  text-anchor="end" class="cal-curve-label">${topLbl}</text>`);
+  parts.push(`<text x="${padL - 4}" y="${H - padB + 1}" text-anchor="end" class="cal-curve-label">${botLbl}</text>`);
   // X-axis labels at min/max input.
   parts.push(`<text x="${xOf(minIn)}" y="${H - 2}" text-anchor="middle" class="cal-curve-label">${formatNum(minIn)}</text>`);
   parts.push(`<text x="${xOf(maxIn)}" y="${H - 2}" text-anchor="middle" class="cal-curve-label">${formatNum(maxIn)}</text>`);
 
   // Polyline through the breakpoints.
-  const pts = bps.map(b => `${xOf(b.input).toFixed(2)},${yOf(b.volts).toFixed(2)}`).join(' ');
+  const pts = bps.map(b => `${xOf(b.input).toFixed(2)},${yOf(b[m.attr]).toFixed(2)}`).join(' ');
   parts.push(`<polyline class="cal-curve-line" points="${pts}"/>`);
   // Breakpoint dots.
+  const tipUnit = m.unit === 'volts' ? ' V' : '';
   for (let i = 0; i < bps.length; i++) {
     const cx = xOf(bps[i].input).toFixed(2);
-    const cy = yOf(bps[i].volts).toFixed(2);
+    const cy = yOf(bps[i][m.attr]).toFixed(2);
     const cls = flagged[i] ? 'cal-curve-dot warn' : 'cal-curve-dot';
-    parts.push(`<circle class="${cls}" cx="${cx}" cy="${cy}" r="3.5"><title>(${formatNum(bps[i].input)}, ${formatNum(bps[i].volts)} V)</title></circle>`);
+    parts.push(`<circle class="${cls}" cx="${cx}" cy="${cy}" r="3.5"><title>(${formatNum(bps[i].input)}, ${formatNum(bps[i][m.attr])}${tipUnit})</title></circle>`);
   }
   return parts.join('');
 }
@@ -1201,10 +1228,15 @@ function updateCalibrationCurve(pn, channelIdx) {
     const min = (typeof liveCh.inputMin === 'number') ? liveCh.inputMin : tplCh.inputMin;
     const max = (typeof liveCh.inputMax === 'number') ? liveCh.inputMax : tplCh.inputMax;
     bps = linearAsBreakpoints(min, max);
-  } else {
-    bps = liveCh.breakpoints || tplCh.breakpoints || [];
+    // Linear is always volts (-10..+10) by definition.
+    svg.innerHTML = renderCalibrationCurveSvg(bps);
+    return;
   }
-  svg.innerHTML = renderCalibrationCurveSvg(bps);
+  bps = liveCh.breakpoints || tplCh.breakpoints || [];
+  // Piecewise channels can override the y-axis unit; resolver-scrub paths
+  // already returned earlier so this only fires for piecewise.
+  const meta = piecewiseOutputMeta(tplCh);
+  svg.innerHTML = renderCalibrationCurveSvg(bps, meta);
 }
 
 // ── Linear channel editor ────────────────────────────────────────────────────
@@ -1992,13 +2024,14 @@ function setCalibrationBreakpoint(pn, channelIdx, channelId, idx, field, value) 
   const n = Number(value);
   if (!Number.isFinite(n)) return;
   bp[field] = n;
-  // Live sync: if the user typed a new volts value, push it into the matching
-  // slider so the two stay aligned. Same for input → slider isn't applicable
-  // (the slider is fixed -10..+10 V and only tracks volts).
-  if (field === 'volts') {
+  // Live sync: if the user typed a new output value (volts/output/angle —
+  // the value attribute the channel uses), push it into the matching slider
+  // so the two stay aligned. Slider range follows the channel's outputUnit.
+  const meta = piecewiseOutputMeta(ch);
+  if (field === meta.attr) {
     const slider = document.getElementById(`cal-row-${pn}-${channelIdx}-${idx}-slider`);
     if (slider) {
-      slider.value = String(Math.max(-10, Math.min(10, n)));
+      slider.value = String(Math.max(meta.min, Math.min(meta.max, n)));
     }
   }
   updateCalibrationCurve(pn, channelIdx);
@@ -2009,7 +2042,9 @@ function setCalibrationBreakpoint(pn, channelIdx, channelId, idx, field, value) 
 }
 
 // Slider drag handler: updates the model AND the sibling number input AND
-// the curve, all without re-rendering the table.
+// the curve, all without re-rendering the table. Name kept as
+// `setCalibrationVoltsLive` for compatibility with existing inline handlers
+// — actually writes to the channel's outputUnit attr (volts or output).
 function setCalibrationVoltsLive(pn, channelIdx, channelId, idx, value) {
   const p = profiles[activeIdx];
   const entry = ensureGaugeEntry(p, pn);
@@ -2020,7 +2055,8 @@ function setCalibrationVoltsLive(pn, channelIdx, channelId, idx, value) {
   if (!bp) return;
   const n = Number(value);
   if (!Number.isFinite(n)) return;
-  bp.volts = n;
+  const meta = piecewiseOutputMeta(ch);
+  bp[meta.attr] = n;
   // Mirror the slider's value into the sibling number input so the user can
   // see the precise value while dragging.
   const num = document.getElementById(`cal-row-${pn}-${channelIdx}-${idx}-num`);
@@ -2037,9 +2073,13 @@ function addCalibrationBreakpoint(pn, channelId) {
   const ch = entry.channels.find(c => c.id === channelId);
   if (!ch || !ch.breakpoints) return;
   // New breakpoint defaults: place it at the end, midway between the last
-  // input and the last input + 10. Volts copies the previous row's volts.
-  const last = ch.breakpoints[ch.breakpoints.length - 1] || { input: 0, volts: 0 };
-  ch.breakpoints.push({ input: last.input + 10, volts: last.volts });
+  // input and the last input + 10. Output copies the previous row's value
+  // under the channel's outputUnit attr (volts/output).
+  const meta = piecewiseOutputMeta(ch);
+  const last = ch.breakpoints[ch.breakpoints.length - 1] || { input: 0, [meta.attr]: 0 };
+  const newBp = { input: (Number(last.input) || 0) + 10 };
+  newBp[meta.attr] = Number(last[meta.attr]) || 0;
+  ch.breakpoints.push(newBp);
   renderCalibration();
 }
 

@@ -18,10 +18,25 @@
 // absent from GAUGE_CALIBRATION_DEFAULTS, so this module never touches their
 // files.
 
+// Per-PN filename overrides for the few gauges where the unified-schema
+// calibration file deliberately has a name distinct from the gauge's
+// existing legacy config (so the two can coexist without colliding).
+//
+// HenkieF16FuelFlow: the legacy gauge HSM consumes
+// HenkieF16FuelFlowIndicator.config (with stator angles, DIG_OUT init values,
+// AND the calibration table). The unified-schema file ships separately as
+// HenkieF16FuelFlowHardwareSupportModule.config (no "Indicator" suffix) so
+// the patched SimLinkup HSM can read calibration from there while the
+// existing file continues to own stator/DIG_OUT/identity. See the fork
+// branch simlinkup-editor-support for the matching HSM patch.
+const GAUGE_CONFIG_FILENAME_OVERRIDES = {
+  'HenkieF16FuelFlow': 'HenkieF16FuelFlowHardwareSupportModule.config',
+};
+
 // Build the file basename for a gauge from its catalog `cls`. Returns null
-// for non-Simtek gauges (the schema is Simtek-style today; other manufacturers
-// use different config conventions and aren't in GAUGE_CALIBRATION_DEFAULTS).
+// for gauges whose schema isn't authored by this editor.
 function gaugeConfigFilenameForPn(pn) {
+  if (GAUGE_CONFIG_FILENAME_OVERRIDES[pn]) return GAUGE_CONFIG_FILENAME_OVERRIDES[pn];
   const inst = INSTRUMENTS.find(i => i.pn === pn);
   if (!inst || !inst.cls) return null;
   // Last segment of the class FQN, e.g. "Simtek100207HardwareSupportModule".
@@ -35,6 +50,10 @@ function gaugeConfigFilenameForPn(pn) {
 // on-disk file back to a known gauge.
 function gaugePnForConfigFilename(filename) {
   if (!filename) return null;
+  // Override map first — covers the gauges that use a non-cls-derived name.
+  for (const [pn, fname] of Object.entries(GAUGE_CONFIG_FILENAME_OVERRIDES)) {
+    if (filename === fname) return pn;
+  }
   const m = filename.match(/^(.*HardwareSupportModule)\.config$/);
   if (!m) return null;
   const shortName = m[1];
@@ -54,7 +73,16 @@ function gaugePnForConfigFilename(filename) {
 function renderGaugeConfigXml(pn, entry) {
   const inst = INSTRUMENTS.find(i => i.pn === pn);
   if (!inst || !inst.cls) return null;
-  const root = inst.cls.split('.').pop();
+  // Root element name = the unified-schema filename (without ".config")
+  // when an override exists, otherwise the gauge HSM's class short name.
+  // For HenkieF16FuelFlow this gives <HenkieF16FuelFlowHardwareSupportModule>
+  // instead of <HenkieF16FuelFlowIndicatorHardwareSupportModule>, since the
+  // unified schema file lives alongside the legacy Indicator file rather
+  // than replacing it.
+  const overrideFilename = GAUGE_CONFIG_FILENAME_OVERRIDES[pn];
+  const root = overrideFilename
+    ? overrideFilename.replace(/\.config$/, '')
+    : inst.cls.split('.').pop();
   const tpl = gaugeCalibrationDefaultsFor(pn);
   if (!tpl) return null;
 
@@ -93,9 +121,15 @@ function renderGaugeConfigXml(pn, entry) {
     lines.push(transformOpen);
     if (kind === 'piecewise') {
       const bps = (ch.breakpoints && ch.breakpoints.length) ? ch.breakpoints : tplCh.breakpoints;
+      // Emit `volts` for the standard volts-output gauges (32 today) and
+      // `output` for raw-DAC-output gauges (Henkie family). Both round-trip
+      // through parseGaugeConfigXml. The on-disk attribute follows what the
+      // SimLinkup-side HSM expects to read.
+      const meta = piecewiseOutputMeta(tplCh);
       lines.push('        <Breakpoints>');
       for (const bp of bps) {
-        lines.push(`          <Point input="${formatNum(bp.input)}" volts="${formatNum(bp.volts)}"/>`);
+        const v = bp[meta.attr];
+        lines.push(`          <Point input="${formatNum(bp.input)}" ${meta.attr}="${formatNum(v)}"/>`);
       }
       lines.push('        </Breakpoints>');
     } else if (kind === 'linear') {
@@ -174,8 +208,16 @@ function renderGaugeConfigXml(pn, entry) {
       const invert = (typeof ch.invert === 'boolean') ? ch.invert : !!tplCh.invert;
       lines.push(`      <Invert>${invert ? 'true' : 'false'}</Invert>`);
     } else {
-      lines.push(`      <ZeroTrimVolts>${formatNum(ch.zeroTrim ?? CALIBRATION_TRIM_DEFAULTS.zeroTrim)}</ZeroTrimVolts>`);
-      lines.push(`      <GainTrim>${formatNum(ch.gainTrim ?? CALIBRATION_TRIM_DEFAULTS.gainTrim)}</GainTrim>`);
+      // Trim fields are volts-specific (zero offset in V, scale unitless).
+      // DAC-output channels (Henkie family) don't have a trim layer — their
+      // calibration table IS the final DAC output. Skip the trim block to
+      // keep the on-disk file matching the SimLinkup-side schema.
+      const isVoltsKind = (kind !== 'piecewise') ||
+        (piecewiseOutputMeta(tplCh).unit === 'volts');
+      if (isVoltsKind) {
+        lines.push(`      <ZeroTrimVolts>${formatNum(ch.zeroTrim ?? CALIBRATION_TRIM_DEFAULTS.zeroTrim)}</ZeroTrimVolts>`);
+        lines.push(`      <GainTrim>${formatNum(ch.gainTrim ?? CALIBRATION_TRIM_DEFAULTS.gainTrim)}</GainTrim>`);
+      }
       // Cross-coupling pointer — emitted on any channel whose output
       // feeds into another's coupling math. The C# loader uses this to
       // know "this piecewise table produces a reference voltage that
@@ -278,11 +320,13 @@ function parseGaugeConfigXml(xmlText, pn) {
       const fallback = {
         id: tplCh.id,
         kind: tplCh.kind,
-        // Carry breakpoints with both volts and angle; only the kind's
-        // expected attribute will be populated in real entries.
+        // Carry breakpoints with whichever output attribute the kind uses
+        // (volts for piecewise/volts, output for piecewise/dac, angle for
+        // piecewise_resolver).
         breakpoints: (tplCh.breakpoints || []).map(bp => {
           const out = { input: bp.input };
           if (typeof bp.volts === 'number') out.volts = bp.volts;
+          if (typeof bp.output === 'number') out.output = bp.output;
           if (typeof bp.angle === 'number') out.angle = bp.angle;
           return out;
         }),
@@ -322,14 +366,24 @@ function parseGaugeConfigXml(xmlText, pn) {
     let invert;
     let unitsPerRevolution;
     if (kind === 'piecewise') {
+      // Breakpoint Point attribute: `volts` for AnalogDevices-driven gauges
+      // (32 today) and `output` for raw-DAC gauges (Henkie family). The
+      // template tells us which the channel uses; on disk we accept either.
+      const meta = piecewiseOutputMeta(tplCh);
       const points = xform?.querySelectorAll('Breakpoints > Point') || [];
       if (points.length >= 2) {
         breakpoints = [];
         for (const pt of points) {
           const i = Number(pt.getAttribute('input'));
-          const v = Number(pt.getAttribute('volts'));
+          // Try the channel's expected attribute first, fall back to the
+          // other name for forward-compatibility / typo recovery.
+          let raw = pt.getAttribute(meta.attr);
+          if (raw === null || raw === '') raw = pt.getAttribute(meta.attr === 'volts' ? 'output' : 'volts');
+          const v = Number(raw);
           if (Number.isFinite(i) && Number.isFinite(v)) {
-            breakpoints.push({ input: i, volts: v });
+            const bp = { input: i };
+            bp[meta.attr] = v;
+            breakpoints.push(bp);
           }
         }
       }
@@ -401,11 +455,12 @@ function parseGaugeConfigXml(xmlText, pn) {
     }
     if (!breakpoints || breakpoints.length < 2) {
       // Fall back to template breakpoints, preserving whichever output
-      // attribute the kind expects (volts for piecewise, angle for
-      // piecewise_resolver).
+      // attribute the kind expects (volts for piecewise/volts, output for
+      // piecewise/dac, angle for piecewise_resolver).
       breakpoints = (tplCh.breakpoints || []).map(bp => {
         const out = { input: bp.input };
         if (typeof bp.volts === 'number') out.volts = bp.volts;
+        if (typeof bp.output === 'number') out.output = bp.output;
         if (typeof bp.angle === 'number') out.angle = bp.angle;
         return out;
       });

@@ -32,7 +32,8 @@
 //         kind: 'piecewise' | 'linear' | 'resolver' | 'piecewise_resolver'
 //             | 'digital_invert' | 'multi_resolver' | 'cross_coupled',
 //         // pattern-specific fields:
-//         breakpoints: [{ input, volts }, ...]    // piecewise
+//         breakpoints: [{ input, volts }, ...]    // piecewise (volts unit)
+//         breakpoints: [{ input, output }, ...]   // piecewise (dac unit)
 //         breakpoints: [{ input, angle }, ...]    // piecewise_resolver (deg)
 //         inputMin, inputMax                       // linear, resolver
 //         angleMinDegrees, angleMaxDegrees,
@@ -42,11 +43,28 @@
 //         role, partnerChannel                     // resolver, piecewise_resolver, multi_resolver
 //         coupledTo: '<other-channel-id>'          // cross_coupled
 //         invert: true|false                       // digital_invert
+//         // Output-unit hints for piecewise (default 'volts', range ±10 V):
+//         outputUnit: 'volts' | 'dac',             // 'dac' = raw DAC counts
+//         outputMin: -10, outputMax: 10,           // default for volts
+//         outputLabel: 'Volts' | 'DAC',            // header text in the UI
+//         outputStep: 0.001 | 1,                   // slider step
 //         // (multi_resolver: schema reserved, no editor yet)
-//         zeroTrim: <volts>,                       // analog kinds
+//         zeroTrim: <volts|dac>,                   // analog kinds; unit follows outputUnit
 //         gainTrim: <unitless multiplier> }        // analog kinds
 //     ]
 //   }
+//
+// Output-unit notes:
+//   - Most gauges drive an AnalogDevices DAC channel; the calibration table is
+//     "input value → volts (-10..+10)" because that's what the C# transform
+//     produces and the Hardware Config tab's per-channel DAC offset/gain
+//     converts to raw DAC codes downstream.
+//   - Some gauges (Henkie family) drive their DAC internally over USB/PHCC,
+//     bypassing AnalogDevices entirely. Their on-disk calibration is in raw
+//     DAC counts (typically 0..4095 for 12-bit). Per-channel `outputUnit:'dac'`
+//     plus `outputMin/outputMax` makes the editor render in DAC counts and
+//     skip the volts-clamp validation. Round-trip uses `<output>` element
+//     instead of `<volts>` so on-disk files match the gauge's HSM expectation.
 //
 // A gauge without an entry here gets a stub "no calibration editor yet" card
 // on the Calibration tab — but the on-disk profile is still produced cleanly
@@ -60,6 +78,37 @@ const GAUGE_CALIBRATION_DEFAULTS = {};
 // Per-channel zero-trim and gain-trim defaults. Used by the piecewise editor
 // to detect "user edited a trim field" vs "matches spec-sheet defaults".
 const CALIBRATION_TRIM_DEFAULTS = Object.freeze({ zeroTrim: 0, gainTrim: 1 });
+
+// Resolve the output-unit metadata for a piecewise channel. Returns the
+// fields the editor needs (unit, min, max, label, step, attribute name on
+// the breakpoint) with defaults that match the legacy volts-only behavior.
+// Pass either a template channel or a live channel — both shapes produce
+// the same metadata.
+function piecewiseOutputMeta(ch) {
+  const unit = ch?.outputUnit || 'volts';
+  if (unit === 'dac') {
+    return {
+      unit: 'dac',
+      min: typeof ch?.outputMin === 'number' ? ch.outputMin : 0,
+      max: typeof ch?.outputMax === 'number' ? ch.outputMax : 4095,
+      label: ch?.outputLabel || 'DAC',
+      step: typeof ch?.outputStep === 'number' ? ch.outputStep : 1,
+      // Breakpoint attribute name in JS state and on-disk XML for this unit.
+      // 'output' to mirror the existing C# config schemas (Henkie's
+      // <CalibrationData><CalibrationPoint><Output>...</Output></CalibrationPoint>).
+      attr: 'output',
+    };
+  }
+  // Default 'volts' — every existing gauge falls in here unchanged.
+  return {
+    unit: 'volts',
+    min: typeof ch?.outputMin === 'number' ? ch.outputMin : -10,
+    max: typeof ch?.outputMax === 'number' ? ch.outputMax : 10,
+    label: ch?.outputLabel || 'Volts',
+    step: typeof ch?.outputStep === 'number' ? ch.outputStep : 0.001,
+    attr: 'volts',
+  };
+}
 
 // Returns the spec-sheet default record for a gauge, or null if the editor
 // doesn't yet know how to calibrate this gauge. The returned object is the
@@ -79,17 +128,26 @@ function cloneGaugeCalibrationDefault(pn) {
       const cloned = {
         id: ch.id,
         kind: ch.kind,
-        // Carry both volts and angle on each breakpoint — only the kind's
+        // Carry volts / output / angle on each breakpoint — only the kind's
         // expected attribute will be populated.
         breakpoints: (ch.breakpoints || []).map(bp => {
           const c = { input: bp.input };
           if (typeof bp.volts === 'number') c.volts = bp.volts;
+          if (typeof bp.output === 'number') c.output = bp.output;
           if (typeof bp.angle === 'number') c.angle = bp.angle;
           return c;
         }),
         zeroTrim: ch.zeroTrim ?? CALIBRATION_TRIM_DEFAULTS.zeroTrim,
         gainTrim: ch.gainTrim ?? CALIBRATION_TRIM_DEFAULTS.gainTrim,
       };
+      // Output-unit hints for piecewise channels driven in non-volts units
+      // (e.g. Henkie family, raw DAC counts). Default 'volts'/-10..+10 stays
+      // implicit for the 32 existing gauges.
+      if (ch.outputUnit) cloned.outputUnit = ch.outputUnit;
+      if (typeof ch.outputMin === 'number') cloned.outputMin = ch.outputMin;
+      if (typeof ch.outputMax === 'number') cloned.outputMax = ch.outputMax;
+      if (ch.outputLabel) cloned.outputLabel = ch.outputLabel;
+      if (typeof ch.outputStep === 'number') cloned.outputStep = ch.outputStep;
       // Linear-kind fields are optional — only carry them when the template
       // declares them. Saves us emitting them as "undefined" for non-linear
       // channels which would confuse the round-trip.
@@ -138,10 +196,14 @@ function gaugeCalibrationIsEdited(pn, entry) {
     for (let j = 0; j < bps.length; j++) {
       if (!eq(bps[j].input, t.breakpoints[j].input)) return true;
       // Compare whichever output attribute the template uses (volts for
-      // piecewise, angle for piecewise_resolver). Both sides should agree
-      // on which one is set — but if not, treat as edited.
+      // piecewise/volts, output for piecewise/dac, angle for
+      // piecewise_resolver). Both sides should agree on which one is set —
+      // but if not, treat as edited.
       if (typeof t.breakpoints[j].volts === 'number') {
         if (!eq(bps[j].volts, t.breakpoints[j].volts)) return true;
+      }
+      if (typeof t.breakpoints[j].output === 'number') {
+        if (!eq(bps[j].output, t.breakpoints[j].output)) return true;
       }
       if (typeof t.breakpoints[j].angle === 'number') {
         if (!eq(bps[j].angle, t.breakpoints[j].angle)) return true;
@@ -184,7 +246,9 @@ function gaugeCalibrationIsEdited(pn, entry) {
 
 // Validate a piecewise channel for the warnings the UI surfaces. Returns
 //   { ok, warnings: [string, ...] }
-// Non-blocking — values still save; warnings are advisory.
+// Non-blocking — values still save; warnings are advisory. Range-aware so
+// volts channels warn at ±10 V while DAC channels warn at their own
+// outputMin/outputMax.
 function validatePiecewiseChannel(ch) {
   const warnings = [];
   const bps = (ch && ch.breakpoints) || [];
@@ -198,10 +262,14 @@ function validatePiecewiseChannel(ch) {
       break;
     }
   }
+  const meta = piecewiseOutputMeta(ch);
   for (const bp of bps) {
-    const v = Number(bp.volts);
-    if (!Number.isFinite(v) || v < -10 || v > 10) {
-      warnings.push('Volts outside ±10 V will be clamped by the gauge HSM.');
+    const v = Number(bp[meta.attr]);
+    if (!Number.isFinite(v) || v < meta.min || v > meta.max) {
+      const range = meta.unit === 'dac'
+        ? `${meta.min}..${meta.max}`
+        : '±10 V';
+      warnings.push(`${meta.label} outside ${range} will be clamped by the gauge HSM.`);
       break;
     }
   }
