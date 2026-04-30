@@ -591,11 +591,45 @@ function generateMappingFiles(p) {
   }
 
   const files = [];
-  // One file per gauge that has edges.
+  // Captured at load time so legacy / custom filenames survive a save.
+  // Each entry: { filename, ports: [portName, ...] } — multiple per PN
+  // for the case where a gauge's mappings are split across files (e.g.
+  // Nigel's Malwin 19581 hydraulic pressure A + B).
+  const captured = p.mappingFilesByPn || {};
+
+  // One or more files per gauge that has edges.
   for (const [pn, edges] of byGauge) {
     const inst = INSTRUMENTS.find(i => i.pn === pn);
-    const filename = mappingFilenameForGauge(pn, inst);
-    files.push({ filename, content: renderMappingXml(edges) });
+    const legacyFiles = captured[pn] && captured[pn].length ? captured[pn] : null;
+    if (legacyFiles) {
+      // Distribute the gauge's edges across the legacy files based on
+      // port-name matching. New ports (not in any legacy file) go into
+      // the first file as a safe default.
+      const buckets = legacyFiles.map(f => ({
+        filename: f.filename,
+        ports: new Set(f.ports || []),
+        edges: [],
+      }));
+      for (const e of edges) {
+        const port = e.stage === 1 ? e.dstGaugePort
+                   : ((e.stage === 2 || e.stage === '1.5') ? e.srcGaugePort : null);
+        let bucket = port ? buckets.find(b => b.ports.has(port)) : null;
+        if (!bucket) bucket = buckets[0];
+        bucket.edges.push(e);
+      }
+      // Emit every legacy file even if a bucket is empty — empty
+      // <SignalMappings/> is valid and keeps SimLinkup happy with the
+      // registered HSM. main.js's sweep-on-save only deletes files
+      // whose name isn't in the wantedNames set, so emitting the
+      // legacy filename here protects it.
+      for (const b of buckets) {
+        files.push({ filename: b.filename, content: renderMappingXml(b.edges) });
+      }
+    } else {
+      // No legacy filenames captured for this PN — use the default name.
+      const filename = mappingFilenameForGauge(pn, inst);
+      files.push({ filename, content: renderMappingXml(edges) });
+    }
   }
 
   // Also emit one file per active-but-unwired gauge so SimLinkup's HSM
@@ -605,8 +639,16 @@ function generateMappingFiles(p) {
     if (byGauge.has(pn)) continue;
     const inst = INSTRUMENTS.find(i => i.pn === pn);
     if (!inst) continue;
-    const filename = mappingFilenameForGauge(pn, inst);
-    files.push({ filename, content: renderMappingXml([]) });
+    const legacyFiles = captured[pn] && captured[pn].length ? captured[pn] : null;
+    if (legacyFiles) {
+      // Preserve every legacy file as empty so the sweep doesn't delete it.
+      for (const f of legacyFiles) {
+        files.push({ filename: f.filename, content: renderMappingXml([]) });
+      }
+    } else {
+      const filename = mappingFilenameForGauge(pn, inst);
+      files.push({ filename, content: renderMappingXml([]) });
+    }
   }
 
   // Misc edges (rare — e.g. unknown destinations) go into a fallback file.
@@ -617,6 +659,9 @@ function generateMappingFiles(p) {
   return files;
 }
 
+// Default filename for a gauge that has no legacy filename captured
+// (i.e. a gauge added to the profile after load). Simtek<digits><descriptor>
+// for Simtek gauges, or "<pn>.mapping" for everything else.
 function mappingFilenameForGauge(pn, inst) {
   if (inst && inst.cls && inst.cls.includes('.Simtek.Simtek')) {
     // Match the Simtek<digits><descriptor>.mapping convention used by sample

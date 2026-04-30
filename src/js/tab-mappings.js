@@ -97,6 +97,11 @@ function onSetSourceForInputPort(pn, port, kind, value) {
   pruneEmptyEdges(p);
   rebuildInstrumentView(p);
   renderMappings();
+  // The Calibration tab's live-cal section reads chain.edges to find each
+  // gauge's wired sim source. After a stage-1 wiring change, the live-cal
+  // sliders for this gauge need to refresh so the user sees the new source
+  // without flipping back to the Calibration tab and reopening the card.
+  renderCalibration();
 }
 
 function onSetDriverForOutputPort(pn, port, kind, driver) {
@@ -111,6 +116,7 @@ function onSetDriverForOutputPort(pn, port, kind, driver) {
   pruneEmptyEdges(p);
   rebuildInstrumentView(p);
   renderMappings();
+  renderCalibration();
 }
 
 function onSetChannelForOutputPort(pn, port, field, value) {
@@ -129,6 +135,7 @@ function onSetChannelForOutputPort(pn, port, field, value) {
   }
   rebuildInstrumentView(p);
   renderMappings();
+  renderCalibration();
 }
 
 // ── Conflict detection ───────────────────────────────────────────────────────
@@ -223,7 +230,18 @@ function renderMappings() {
 // across re-renders — that's intentional, simpler model than tracking it.
 function setAllGaugeCardsOpen(open) {
   const cards = document.querySelectorAll('#mappingCards details.instrument-card');
-  for (const c of cards) c.open = !!open;
+  const p = profiles[activeIdx];
+  for (const c of cards) {
+    c.open = !!open;
+    // Mirror the open state into the persistence Set so the next re-render
+    // (triggered by any field edit) doesn't immediately collapse cards
+    // back. Mirrors setAllCalibrationCardsOpen.
+    if (!p) continue;
+    const pn = c.dataset.pn;
+    if (!pn) continue;
+    const key = `${p.name}|${pn}`;
+    if (open) _mappingsOpen.add(key); else _mappingsOpen.delete(key);
+  }
 }
 
 // Compute wiring completeness for one gauge card. Returns
@@ -272,14 +290,27 @@ function computeGaugeCompletion(inst, p) {
   return { inputs, outputs, broken, complete };
 }
 
+// Persist which Mappings cards are open across re-renders. Without this,
+// editing any field calls renderMappings() and every card snaps shut —
+// extremely annoying when you're stepping through inputs and outputs on a
+// gauge. Mirror of _calibrationOpen / _hwconfigOpen.
+const _mappingsOpen = new Set();
+
 function renderInstrumentCard(inst, view) {
   // <details> is the wrapper so the card collapses natively on summary click.
-  // Default-closed; user opens the gauges they want to edit. The Expand-all /
-  // Collapse-all toolbar buttons toggle every card at once.
+  // Default-closed on first render of a profile; user opens the gauges they
+  // want to edit. The Expand-all / Collapse-all toolbar buttons toggle every
+  // card at once. _mappingsOpen restores open state across the re-renders
+  // triggered by every field edit.
   const card = document.createElement('details');
   card.className = 'instrument-card';
   card.dataset.pn = inst.pn;
   const p = profiles[activeIdx];
+  if (_mappingsOpen.has(`${p.name}|${inst.pn}`)) card.open = true;
+  card.addEventListener('toggle', () => {
+    const key = `${p.name}|${inst.pn}`;
+    if (card.open) _mappingsOpen.add(key); else _mappingsOpen.delete(key);
+  });
   const stats = computeGaugeCompletion(inst, p);
 
   // Decide the gauge's overall status. Drives both the header background

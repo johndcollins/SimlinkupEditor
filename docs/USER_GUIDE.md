@@ -369,6 +369,17 @@ and watch the needle.
 - **Falcon BMS must NOT be running.** The bridge will refuse to start
   if BMS is alive, because both writing to the same shared memory at
   once would fight each other. Close BMS first.
+- **The gauge must be fully wired on the Signal Mappings tab.** Live
+  calibration needs the full chain end-to-end:
+  - Each gauge **input** wired to a sim source (e.g. an `F4_*` signal).
+    This is what the bridge writes to shared memory.
+  - Each gauge **output** wired to a driver channel (DAC, SDI, Teensy,
+    etc.). This is what physically drives the needle.
+
+  If either end is missing, the gauge's calibration card shows
+  *"Live calibration unavailable"* with a hint about what's missing —
+  the **Start live calibration** button only appears when both ends
+  are wired.
 - **The profile you're calibrating must be the active SimLinkup
   profile** — i.e. the one set as default, or the one you've manually
   loaded into SimLinkup. Otherwise the DAC channel for the gauge under
@@ -459,6 +470,22 @@ Three things to check:
 3. Restart SimLinkup. Profile changes are picked up on SimLinkup
    start — gauge calibration files hot-reload, but the profile
    itself doesn't.
+
+### "Live calibration unavailable" on a gauge card
+
+The card needs **both ends of the chain wired** on the Signal Mappings
+tab before live calibration can start:
+
+- **Inputs** — every gauge input must be wired to a sim source (e.g.
+  an `F4_*` Falcon BMS signal). The bridge writes these into shared
+  memory.
+- **Outputs** — every gauge output (or at least one) must be wired to
+  a driver channel (DAC, SDI, Teensy, etc.). This is what physically
+  drives the needle.
+
+The card's hint text tells you which side is missing. After fixing the
+wiring on the Signal Mappings tab, the card refreshes immediately —
+you don't need to switch tabs or reopen the editor.
 
 ### "Live calibration cannot start: Falcon BMS is running"
 

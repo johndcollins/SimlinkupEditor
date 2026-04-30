@@ -502,15 +502,45 @@ function renderLiveCalibration(pn) {
     });
   }
 
+  // Detect output wiring state — the bridge can write a sim value, but the
+  // physical needle won't move unless the gauge HSM's output is also wired
+  // to a real driver channel (DAC, SDI, etc). Live cal needs the full
+  // chain end-to-end. Without this check, a user with only the input wired
+  // would start a session, scrub the slider, and see nothing move — and
+  // not know why.
+  const outputsWired = (inst.outputGroups || []).some(group =>
+    (group.ports || []).some(portTpl => {
+      const e = (p.chain?.edges || []).find(x =>
+        x.stage === 2 && x.srcGaugePn === pn && x.srcGaugePort === portTpl.port
+      );
+      return e && e.dstDriver && e.dstDriverDevice != null && e.dstDriverChannel != null && e.dstDriverChannel !== '';
+    })
+  );
+
   if (wired.length === 0) {
     // No live calibration possible without a sim source. Render a hint
     // pointing the user at the Mappings tab.
     return `
       <div class="live-cal-empty">
         <strong>Live calibration unavailable.</strong>
-        Wire a sim source (e.g. an <code>F4_*</code> signal in Falcon BMS) to
-        each input port on this gauge from the <em>Signal Mappings</em> tab,
-        then return here to drive the gauge live.
+        Live calibration needs the full chain wired end-to-end on the
+        <em>Signal Mappings</em> tab:
+        <ol class="live-cal-checklist">
+          <li>Each gauge input wired to a sim source (e.g. an <code>F4_*</code> signal in Falcon BMS) — drives the bridge.</li>
+          <li>Each gauge output wired to a driver channel (DAC, SDI, etc.) — drives the physical needle.</li>
+        </ol>
+      </div>`;
+  }
+
+  if (!outputsWired) {
+    return `
+      <div class="live-cal-empty">
+        <strong>Live calibration unavailable.</strong>
+        The gauge inputs are wired to a sim source, but no outputs are
+        wired to a driver channel yet. Without a wired output the bridge
+        will set sim values but the physical needle won't move. Wire the
+        gauge's output ports to a DAC / SDI / Teensy channel on the
+        <em>Signal Mappings</em> tab, then return here.
       </div>`;
   }
 
@@ -540,9 +570,12 @@ function renderLiveCalibration(pn) {
         </div>
         <div class="live-cal-help">
           Drives the physical gauge from sliders below. The bridge writes
-          synthetic sim values into ${escHtml(sim)}'s shared memory; SimLinkup
-          (running separately, watching the same memory) drives the DAC
-          channel for this gauge. Close ${escHtml(sim)} before starting —
+          synthetic sim values into ${escHtml(sim)}'s shared memory;
+          SimLinkup (running separately, watching the same memory) reads
+          the value, applies this gauge's calibration, and drives the
+          driver channel wired on the <em>Signal Mappings</em> tab. The
+          full input → gauge HSM → driver chain has to be wired for the
+          physical needle to move. Close ${escHtml(sim)} before starting —
           the sim's own writes would overwrite calibration values.
         </div>
         <div class="live-cal-actions">

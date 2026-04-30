@@ -217,6 +217,22 @@ function buildInstrumentView(edges, instrumentPrefixMap) {
 function parseMappingsFromXml(fileList, declaredPns) {
   const prefixMap = buildInstrumentPrefixMap();
   const edges = [];
+  // Capture which on-disk file each PN's mappings came from. Used at save
+  // time to preserve user/sample filenames (e.g. Nigel's
+  // "Lilbern3321rpm.mapping" or his pair of
+  // "Malwin19581hydraulicPressureA.mapping" + "...PressureB.mapping" for
+  // the same gauge PN) instead of regenerating a fresh name, which would
+  // orphan the original and trigger the sweep-on-save deletion in
+  // main.js.
+  //
+  // Per-PN list of {filename, ports}. `ports` is the set of gauge port
+  // names (input + output) referenced by edges in that file. At save
+  // time we distribute current edges across the legacy files based on
+  // port-name matching: each gauge port routes to whichever legacy
+  // file claimed it. New ports added since load (e.g. user wired a
+  // previously-unwired output) go into the first legacy file as a
+  // safe default.
+  const filesByPn = {};
   for (const { file, content } of fileList) {
     // Per-file PN preference: if the filename matches a known gauge's class
     // short name, restrict ambiguous resolutions to that gauge.
@@ -226,6 +242,8 @@ function parseMappingsFromXml(fileList, declaredPns) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(content, 'text/xml');
     const nodes = doc.querySelectorAll('SignalMapping');
+    // Track which gauge ports appear in this file, grouped by PN.
+    const portsByPn = new Map();
     nodes.forEach(node => {
       const srcEl = node.querySelector('Source');
       const dstEl = node.querySelector('Destination');
@@ -236,11 +254,47 @@ function parseMappingsFromXml(fileList, declaredPns) {
       const xsiType = srcEl?.getAttribute('xsi:type')
                    || dstEl?.getAttribute('xsi:type') || 'AnalogSignal';
       const kind = xsiType === 'DigitalSignal' ? 'digital' : 'analog';
-      edges.push(classifyMapping(src, dst, kind, prefixMap, effectivePns));
+      const edge = classifyMapping(src, dst, kind, prefixMap, effectivePns);
+      edges.push(edge);
+      // Track gauge PN + port for the file → port-set map.
+      let pn = null;
+      let port = null;
+      if (edge.stage === 1 && edge.dstGaugePn) {
+        pn = edge.dstGaugePn;
+        port = edge.dstGaugePort;
+      } else if ((edge.stage === 2 || edge.stage === '1.5') && edge.srcGaugePn) {
+        pn = edge.srcGaugePn;
+        port = edge.srcGaugePort;
+      }
+      if (pn && port) {
+        if (!portsByPn.has(pn)) portsByPn.set(pn, new Set());
+        portsByPn.get(pn).add(port);
+      }
     });
+
+    if (!file) continue;
+    // Claim this file for each PN whose ports it contains.
+    for (const [pn, ports] of portsByPn) {
+      if (!filesByPn[pn]) filesByPn[pn] = [];
+      filesByPn[pn].push({ filename: file, ports: [...ports] });
+    }
+    // If the filename's class short name matches a PN that didn't appear
+    // in any of its edges (empty file for an active-but-unwired gauge),
+    // still claim the filename so a save with no edges keeps it.
+    if (filePns.size > 0) {
+      for (const pn of filePns) {
+        if (!portsByPn.has(pn)) {
+          if (!filesByPn[pn]) filesByPn[pn] = [];
+          // Avoid duplicate entries when the same file already claimed.
+          if (!filesByPn[pn].some(f => f.filename === file)) {
+            filesByPn[pn].push({ filename: file, ports: [] });
+          }
+        }
+      }
+    }
   }
   const instruments = buildInstrumentView(edges, prefixMap);
-  return { edges, instruments };
+  return { edges, instruments, filesByPn };
 }
 
 // Given a .mapping filename, return the set of gauge PNs whose class short
@@ -413,6 +467,16 @@ function applyLoadedChain(p, mappingFileList, hsmRegistryText, ssmRegistryText, 
   const chain = parseMappingsFromXml(mappingFileList, declaredPns);
   p.chain = chain;
   p.driverConfigsRaw = driverConfigsRaw || {};
+  // Per-PN list of legacy mapping files captured at load time. Save uses
+  // this to preserve user/sample filenames across edits (so Nigel's
+  // "Lilbern3321rpm.mapping" doesn't get renamed to the editor's default
+  // "Lilbern3321.mapping" and then swept by main.js as orphaned, and his
+  // pair of "Malwin19581hydraulicPressureA.mapping" / "...PressureB.mapping"
+  // both survive). Each entry: { filename, ports: [portName, ...] }.
+  // New gauges added after load have no entry → fall back to default
+  // naming. See generateMappingFiles for how edges get distributed across
+  // multiple legacy files for one gauge.
+  p.mappingFilesByPn = chain.filesByPn || {};
 
   // p.instruments — union of registry-seeded PNs and chain-derived PNs.
   const instSet = new Set(declaredPns);

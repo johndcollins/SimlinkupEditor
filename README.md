@@ -216,14 +216,19 @@ The editor has six tabs that line up with the order you'd build a profile in:
    See the per-gauge breakdown below for what each gauge offers.
 10. **Live calibration** (inside each Calibration card) — drives the
     physical gauge from sliders in the editor for hands-on hardware
-    tuning. Click **Start live calibration** on a gauge card and the
-    editor spawns a small bridge process that writes synthetic Falcon
-    BMS values into shared memory. SimLinkup, watching the same memory,
-    drives the DAC channel for that gauge. Drag the slider to sweep
-    through the input range; tune the breakpoint voltages until the
-    physical needle lands on each labelled mark. Refuses to start while
-    Falcon BMS is actually running (its writes would fight yours). See
-    the **Live calibration architecture** section below for details.
+    tuning. Requires the gauge's **input AND output** ports to be
+    wired on the Signal Mappings tab (input → sim source, output →
+    driver channel) — the **Start live calibration** button only
+    appears once the full chain is in place. Click it and the editor
+    spawns a small bridge process that writes synthetic Falcon BMS
+    values into shared memory; SimLinkup, watching the same memory,
+    runs the value through the gauge's calibration and drives the DAC
+    (or SDI / Teensy / etc.) channel for that gauge. Drag the slider
+    to sweep through the input range; tune the breakpoint voltages
+    until the physical needle lands on each labelled mark. Refuses
+    to start while Falcon BMS is actually running (its writes would
+    fight yours). See the **Live calibration architecture** section
+    below for details.
 11. **Save to disk** — writes everything into your SimLinkup
     `Content\Mapping\<ProfileName>\` folder, ready for SimLinkup to load.
 12. **Set as default** — writes `default.profile` so SimLinkup loads this
