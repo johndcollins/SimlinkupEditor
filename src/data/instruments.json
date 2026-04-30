@@ -977,6 +977,258 @@
     "digitPrefix": "101091"
   },
   {
+    "pn": "10-5859",
+    "name": "Standby attitude indicator (10-5859)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105859HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "flight",
+    "analog_in": [
+      "Pitch (degrees)",
+      "Roll (degrees)"
+    ],
+    "analog_out": [
+      "Pitch SIN",
+      "Pitch COS",
+      "Roll SIN",
+      "Roll COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (degrees)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (degrees)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Pitch resolver (sin/cos)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Pitch_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Pitch_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver (sin/cos)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "105859"
+  },
+  {
+    "pn": "10-5860",
+    "name": "Fuel flow indicator (10-5860)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105860HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "Fuel flow (PPH)"
+    ],
+    "analog_out": [
+      "Fuel flow output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Fuel_Flow_From_Sim",
+        "label": "Fuel flow (PPH)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "Fuel flow counter",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Fuel_Flow_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "105860"
+  },
+  {
+    "pn": "10-5862",
+    "name": "Nozzle position indicator (10-5862)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105862HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "engine",
+    "analog_in": [
+      "Nozzle position (% open)"
+    ],
+    "analog_out": [
+      "Nozzle SIN",
+      "Nozzle COS"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Nozzle_Position_From_Sim",
+        "label": "Nozzle position (% open)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Nozzle resolver (0..100% → 0..225°)",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Nozzle_Position_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Nozzle_Position_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "105862"
+  },
+  {
+    "pn": "10-5866",
+    "name": "Fuel quantity indicator (10-5866)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105866HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "Total fuel (lbs)",
+      "F/R fuel (lbs)",
+      "A/L fuel (lbs)"
+    ],
+    "analog_out": [
+      "F/R pointer",
+      "A/L pointer",
+      "Total counter"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "Total_Fuel_From_Sim",
+        "label": "Total fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "ForeAndRight_Fuel_From_Sim",
+        "label": "F/R fuel (lbs)",
+        "kind": "analog"
+      },
+      {
+        "port": "AftAndLeft_Fuel_From_Sim",
+        "label": "A/L fuel (lbs)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "F/R pointer",
+        "ports": [
+          {
+            "role": "value",
+            "port": "FR_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "A/L pointer",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AL_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Total counter",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Counter_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "105866"
+  },
+  {
+    "pn": "10-5868",
+    "name": "EPU fuel quantity indicator (10-5868)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105868HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "fuel",
+    "analog_in": [
+      "EPU fuel %"
+    ],
+    "analog_out": [
+      "EPU fuel output"
+    ],
+    "digital_in": [],
+    "digital_out": [],
+    "inputPorts": [
+      {
+        "port": "EPU_From_Sim",
+        "label": "EPU fuel (%)",
+        "kind": "analog"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "analog_single",
+        "label": "EPU fuel needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "EPU_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "105868"
+  },
+  {
     "pn": "9000262001",
     "name": "AMI P/N 90002620-01 - Cabin pressure altimeter",
     "cls": "SimLinkup.HardwareSupport.AMI.AMI9000262001HardwareSupportModule",
