@@ -2,8 +2,23 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { execFile, spawn } = require('child_process');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
+
+// Auto-update state — kept here so the renderer can poll it via the
+// `update:get-status` IPC channel. Renderer surfaces this in a small
+// titlebar pill (idle / checking / available / downloading / ready).
+let updateStatus = { state: 'idle', message: 'Ready', info: null, error: null };
+
+// Push an update-status change to the renderer so the UI can refresh
+// without polling. Safe to call before the window exists (no-op).
+function pushUpdateStatus(next) {
+  updateStatus = { ...updateStatus, ...next };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:status', updateStatus);
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -85,9 +100,102 @@ function seedUserDataFiles() {
   }
 }
 
+// Wire up electron-updater. The actual GitHub Release lookup happens in
+// `autoUpdater.checkForUpdates()`, which we kick off after the window is
+// shown so the splash isn't blocked by a network round-trip. The provider
+// is configured in package.json's build.publish block.
+//
+// Behavior contract:
+//   - The renderer subscribes to update:status events and renders a small
+//     pill in the titlebar.
+//   - Updates are downloaded automatically (autoDownload defaults to true)
+//     and applied on next launch via quitAndInstall — except we trigger
+//     quitAndInstall from a renderer button so the user controls when the
+//     restart happens (mid-edit calibration sessions shouldn't be
+//     interrupted).
+//   - In dev (npm start), electron-updater would normally throw because
+//     the app isn't packaged; we detect that and skip the check entirely
+//     so console output stays clean during development.
+function initAutoUpdater() {
+  if (!app.isPackaged) {
+    pushUpdateStatus({ state: 'idle', message: 'Auto-update disabled in dev', info: null, error: null });
+    return;
+  }
+  // Don't auto-install on quit — the renderer's "Restart and install"
+  // button calls quitAndInstall explicitly. Auto-installing on quit would
+  // surprise users who closed the editor mid-flow.
+  autoUpdater.autoInstallOnAppQuit = false;
+  // Stricter logging surfaces problems quickly in tester reports.
+  autoUpdater.logger = console;
+  autoUpdater.on('checking-for-update', () => {
+    pushUpdateStatus({ state: 'checking', message: 'Checking for updates…', error: null });
+  });
+  autoUpdater.on('update-available', (info) => {
+    pushUpdateStatus({
+      state: 'available',
+      message: `Update ${info.version} available — downloading…`,
+      info: { version: info.version, releaseNotes: info.releaseNotes || null },
+    });
+  });
+  autoUpdater.on('update-not-available', () => {
+    pushUpdateStatus({ state: 'idle', message: 'Up to date', info: null });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    pushUpdateStatus({
+      state: 'downloading',
+      message: `Downloading update… ${Math.round(progress.percent)}%`,
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    pushUpdateStatus({
+      state: 'ready',
+      message: `Update ${info.version} ready to install`,
+      info: { version: info.version, releaseNotes: info.releaseNotes || null },
+    });
+  });
+  autoUpdater.on('error', (e) => {
+    pushUpdateStatus({
+      state: 'error',
+      message: 'Update check failed',
+      error: e ? e.message : 'unknown error',
+    });
+  });
+  // Fire the first check ~5 seconds after launch so it doesn't compete
+  // with profile-loading. Subsequent checks happen on demand via the
+  // update:check IPC handler (the renderer wires a "Check for updates"
+  // menu item).
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(e => {
+      pushUpdateStatus({ state: 'error', message: 'Update check failed', error: e.message });
+    });
+  }, 5000);
+}
+
+// Renderer-side controls. Each handler is a thin wrapper so the renderer
+// doesn't need direct access to electron-updater internals.
+ipcMain.handle('update:get-status', () => updateStatus);
+ipcMain.handle('update:check', async () => {
+  if (!app.isPackaged) return { ok: false, reason: 'dev' };
+  try {
+    await autoUpdater.checkForUpdates();
+    return { ok: true };
+  } catch (e) {
+    pushUpdateStatus({ state: 'error', message: 'Update check failed', error: e.message });
+    return { ok: false, reason: e.message };
+  }
+});
+ipcMain.handle('update:install', () => {
+  // Restart now and apply the downloaded update. Only valid when state
+  // is 'ready' — the renderer enforces that by only enabling its Install
+  // button after `update-downloaded` fires.
+  autoUpdater.quitAndInstall(false /*isSilent*/, true /*isForceRunAfter*/);
+  return { ok: true };
+});
+
 app.whenReady().then(() => {
   seedUserDataFiles();
   createWindow();
+  initAutoUpdater();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

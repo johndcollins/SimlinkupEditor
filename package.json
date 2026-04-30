@@ -1,6 +1,6 @@
 {
   "name": "simlinkup-profile-editor",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "SimLinkup",
   "description": "SimLinkup profile editor — create and manage custom mapping profiles with Simtek instruments",
   "main": "main.js",
@@ -38,12 +38,24 @@
       {
         "from": "bridge/SimLinkupCalibrationBridge/bin/x86/Release/net48/",
         "to": "bridge/",
-        "filter": ["*.exe", "*.dll", "*.config"]
+        "filter": [
+          "*.exe",
+          "*.dll",
+          "*.config"
+        ]
       }
-    ]
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "johndcollins",
+      "repo": "SimlinkupEditor"
+    }
   },
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

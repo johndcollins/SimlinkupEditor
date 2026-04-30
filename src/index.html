@@ -17,6 +17,13 @@
     </div>
   </div>
   <div class="titlebar-right">
+    <!-- Auto-update pill. Click cycles through "check now" / "install"
+         depending on state. Hidden in dev (state stays 'idle' with the
+         "disabled in dev" message). -->
+    <div class="update-pill update-pill-idle" id="updatePill" title="Auto-update status" style="display:none">
+      <span id="updatePillText">Up to date</span>
+      <button id="updatePillAction" type="button" style="display:none"></button>
+    </div>
     <button onclick="autoDetectDir()">Auto-detect</button>
     <button onclick="pickDir()">Change directory</button>
     <button onclick="openFolder()" id="btnOpenFolder" disabled>Open in Explorer</button>
@@ -221,5 +228,6 @@
 <script src="js/tab-calibration.js"></script>
 <script src="js/profile.js"></script>
 <script src="js/init.js"></script>
+<script src="js/update-pill.js"></script>
 </body>
 </html>

@@ -50,6 +50,36 @@ body {
 .app-sub { font-size: 11px; color: var(--text-secondary); }
 .titlebar-right { display: flex; align-items: center; gap: 8px; -webkit-app-region: no-drag; }
 
+/* ── Auto-update pill ── */
+/* Sits in the titlebar's right cluster. State-coloured background. The
+   inner action button shows up only when there's an action the user
+   needs to take (Check now after error / Install now when ready). */
+.update-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 0.5px solid transparent;
+  -webkit-app-region: no-drag;
+}
+.update-pill button {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  height: auto;
+  min-height: 0;
+}
+.update-pill-idle        { background: rgba(0,0,0,0.05); color: var(--text-secondary); }
+.update-pill-checking,
+.update-pill-downloading { background: rgba(11, 99, 206, 0.10); color: var(--text-link, #0b63ce); }
+.update-pill-available,
+.update-pill-downloading { background: rgba(11, 99, 206, 0.10); color: var(--text-link, #0b63ce); }
+.update-pill-ready       { background: rgba(34, 139, 71, 0.12); color: #1f7a38; border-color: rgba(34, 139, 71, 0.4); }
+.update-pill-error       { background: var(--bg-warning); color: #633806; }
+
 /* ── Buttons ── */
 button {
   font-size: 12px;

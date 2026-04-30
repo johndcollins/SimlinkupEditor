@@ -30,4 +30,19 @@ contextBridge.exposeInMainWorld('api', {
     getSignals:   (sim, ids)       => ipcRenderer.invoke('bridge:getSignals', { sim, ids }),
     endSession:   (sim)            => ipcRenderer.invoke('bridge:endSession', { sim }),
   },
+  // ── Auto-update ────────────────────────────────────────────────────────
+  // Status pushes from main come on the 'update:status' channel; the
+  // renderer's onStatus subscribes a callback that fires for every state
+  // change (idle / checking / available / downloading / ready / error).
+  // getStatus() pulls the current snapshot synchronously for first paint.
+  update: {
+    getStatus: ()    => ipcRenderer.invoke('update:get-status'),
+    check:     ()    => ipcRenderer.invoke('update:check'),
+    install:   ()    => ipcRenderer.invoke('update:install'),
+    onStatus:  (cb)  => {
+      const listener = (_event, status) => cb(status);
+      ipcRenderer.on('update:status', listener);
+      return () => ipcRenderer.removeListener('update:status', listener);
+    },
+  },
 });
