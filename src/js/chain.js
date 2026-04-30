@@ -87,6 +87,7 @@ function parseGaugePort(id, instrumentPrefixMap, declaredPns) {
     'Henk_F16_HSI_Board1',
     'Henk_F16_HSI_Board2',
     'HS070D51341',
+    'JDLADI01',
   ];
   for (const prefix of namedPrefixes) {
     if (id.startsWith(prefix + '_')) {

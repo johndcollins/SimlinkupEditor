@@ -2029,6 +2029,222 @@
     "digitPrefix": "12871"
   },
   {
+    "pn": "JDL-ADI01",
+    "name": "Simtek JDL-ADI01 - Attitude director indicator (ADI)",
+    "cls": "SimLinkup.HardwareSupport.Simtek.SimtekJDLADI01HardwareSupportModule",
+    "manufacturer": "Simtek",
+    "cat": "attitude",
+    "analog_in": [
+      "Pitch (deg)",
+      "Roll (deg)",
+      "Horizontal command bar (% defl)",
+      "Vertical command bar (% defl)",
+      "Rate of turn (% defl)",
+      "Inclinometer (% defl)"
+    ],
+    "analog_out": [
+      "Pitch SIN/COS",
+      "Roll SIN/COS",
+      "Horizontal command bar",
+      "Vertical command bar",
+      "Rate of turn",
+      "Inclinometer"
+    ],
+    "digital_in": [
+      "Show command bars",
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "digital_out": [
+      "AUX flag",
+      "GS flag",
+      "LOC flag",
+      "OFF flag"
+    ],
+    "inputPorts": [
+      {
+        "port": "Pitch_From_Sim",
+        "label": "Pitch (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Roll_From_Sim",
+        "label": "Roll (deg)",
+        "kind": "analog"
+      },
+      {
+        "port": "Horizontal_Command_Bar_From_Sim",
+        "label": "Horizontal command bar (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Vertical_Command_Bar_From_Sim",
+        "label": "Vertical command bar (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Rate_Of_Turn_Indicator_From_Sim",
+        "label": "Rate of turn (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Inclinometer_From_Sim",
+        "label": "Inclinometer (% defl)",
+        "kind": "analog"
+      },
+      {
+        "port": "Show_Command_Bars_From_Sim",
+        "label": "Show command bars",
+        "kind": "digital"
+      },
+      {
+        "port": "AUX_Flag_From_Sim",
+        "label": "AUX flag",
+        "kind": "digital"
+      },
+      {
+        "port": "GS_Flag_From_Sim",
+        "label": "GS flag",
+        "kind": "digital"
+      },
+      {
+        "port": "LOC_Flag_From_Sim",
+        "label": "LOC flag",
+        "kind": "digital"
+      },
+      {
+        "port": "OFF_Flag_From_Sim",
+        "label": "OFF flag",
+        "kind": "digital"
+      }
+    ],
+    "outputGroups": [
+      {
+        "kind": "resolver_pair",
+        "label": "Pitch resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Pitch_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Pitch_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "resolver_pair",
+        "label": "Roll resolver",
+        "ports": [
+          {
+            "role": "sin",
+            "port": "Roll_SIN_To_Instrument",
+            "kind": "analog"
+          },
+          {
+            "role": "cos",
+            "port": "Roll_COS_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Horizontal command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Horizontal_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Vertical command bar",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Vertical_Command_Bar_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Rate of turn needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Rate_Of_Turn_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "analog_single",
+        "label": "Inclinometer needle",
+        "ports": [
+          {
+            "role": "value",
+            "port": "Inclinometer_To_Instrument",
+            "kind": "analog"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "AUX flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "AUX_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "GS flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "GS_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "LOC flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "LOC_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      },
+      {
+        "kind": "digital_single",
+        "label": "OFF flag drive",
+        "ports": [
+          {
+            "role": "value",
+            "port": "OFF_Flag_To_Instrument",
+            "kind": "digital"
+          }
+        ]
+      }
+    ],
+    "digitPrefix": "JDLADI01"
+  },
+  {
     "pn": "3239",
     "name": "Lilbern M/N 3239 - F-16A fuel flow indicator",
     "cls": "SimLinkup.HardwareSupport.Lilbern.Lilbern3239HardwareSupportModule",
