@@ -1253,75 +1253,13 @@ function updateCalibrationCurve(pn, channelIdx) {
   const liveCh = (entry?.channels || []).find(c => c.id === tplCh.id) || tplCh;
   const svg = document.getElementById(`cal-curve-${pn}-${channelIdx}`);
   if (!svg) return;
-  if (tplCh.kind === 'resolver') {
-    // Resolver pair re-render — read shared transform fields off the SIN
-    // channel record (cos channel just points back via partnerChannel).
-    const inputMin = (typeof liveCh.inputMin === 'number') ? liveCh.inputMin : (tplCh.inputMin ?? 0);
-    const inputMax = (typeof liveCh.inputMax === 'number') ? liveCh.inputMax : (tplCh.inputMax ?? 100);
-    const angleMin = (typeof liveCh.angleMinDegrees === 'number') ? liveCh.angleMinDegrees : (tplCh.angleMinDegrees ?? 0);
-    const angleMax = (typeof liveCh.angleMaxDegrees === 'number') ? liveCh.angleMaxDegrees : (tplCh.angleMaxDegrees ?? 360);
-    const peakVolts = (typeof liveCh.peakVolts === 'number') ? liveCh.peakVolts : (tplCh.peakVolts ?? 10);
-    const belowMin = liveCh.belowMinBehavior || tplCh.belowMinBehavior || 'clamp';
-    const scrubKey = `${pn}|${tplCh.id}`;
-    let scrubValue = _resolverScrubState.get(scrubKey);
-    if (typeof scrubValue !== 'number') scrubValue = (inputMin + inputMax) / 2;
-    if (scrubValue < inputMin) scrubValue = inputMin;
-    if (scrubValue > inputMax) scrubValue = inputMax;
-    svg.innerHTML = renderResolverDialSvg({ inputMin, inputMax, angleMin, angleMax, peakVolts, belowMin, scrubValue });
-    // Also refresh the readout if the dial is being live-redrawn (scrub
-    // slider drag uses this path, not a full re-render).
-    const readout = document.getElementById(`cal-scrub-readout-${pn}-${channelIdx}`);
-    if (readout) {
-      const ang = scrubAngle({ inputMin, inputMax, angleMin, angleMax, belowMin, scrubValue });
-      const angText = ang === null ? 'rest' : `${formatNum(ang)}°`;
-      readout.innerHTML = `input <strong>${formatNum(scrubValue)}</strong> → angle <strong>${escHtml(angText)}</strong>`;
-    }
-    return;
-  }
-  if (tplCh.kind === 'piecewise_resolver') {
-    // Piecewise resolver re-render — same scrub-driven dial as resolver,
-    // but the angle comes from a piecewise interpolation over breakpoints.
-    const bps = (liveCh.breakpoints && liveCh.breakpoints.length)
-      ? liveCh.breakpoints
-      : (tplCh.breakpoints || []);
-    const inputMin = bps.length ? bps[0].input : 0;
-    const inputMax = bps.length ? bps[bps.length - 1].input : 100;
-    const scrubKey = `${pn}|${tplCh.id}`;
-    let scrubValue = _resolverScrubState.get(scrubKey);
-    if (typeof scrubValue !== 'number') scrubValue = (inputMin + inputMax) / 2;
-    if (scrubValue < inputMin) scrubValue = inputMin;
-    if (scrubValue > inputMax) scrubValue = inputMax;
-    const needleAngle = piecewiseResolverScrubAngle(bps, scrubValue);
-    svg.innerHTML = renderPiecewiseResolverDialSvg({ bps, scrubValue, needleAngle });
-    const readout = document.getElementById(`cal-scrub-readout-${pn}-${channelIdx}`);
-    if (readout) {
-      const angText = needleAngle === null ? 'rest' : formatNum(needleAngle % 360) + '°';
-      readout.innerHTML = `input <strong>${formatNum(scrubValue)}</strong> → angle <strong>${escHtml(angText)}</strong>`;
-    }
-    return;
-  }
-  if (tplCh.kind === 'multi_resolver') {
-    // Multi-turn resolver re-render — same scrub-driven dial. The dial
-    // shows the synchro angle (mod 360); the readout adds the "we're on
-    // revolution N" detail since the dial alone can't communicate it.
-    const unitsPerRevolution = (typeof liveCh.unitsPerRevolution === 'number')
-      ? liveCh.unitsPerRevolution
-      : (tplCh.unitsPerRevolution ?? 1000);
-    const scrubMin = (typeof tplCh.inputMin === 'number') ? tplCh.inputMin : -unitsPerRevolution * 5;
-    const scrubMax = (typeof tplCh.inputMax === 'number') ? tplCh.inputMax : unitsPerRevolution * 80;
-    const scrubKey = `${pn}|${tplCh.id}`;
-    let scrubValue = _resolverScrubState.get(scrubKey);
-    if (typeof scrubValue !== 'number') scrubValue = (scrubMin + scrubMax) / 2;
-    if (scrubValue < scrubMin) scrubValue = scrubMin;
-    if (scrubValue > scrubMax) scrubValue = scrubMax;
-    const revolutions = unitsPerRevolution !== 0 ? scrubValue / unitsPerRevolution : 0;
-    const angleDeg = revolutions * 360;
-    const angleMod = ((angleDeg % 360) + 360) % 360;
-    svg.innerHTML = renderMultiResolverDialSvg({ scrubValue, angleMod });
-    const readout = document.getElementById(`cal-scrub-readout-${pn}-${channelIdx}`);
-    if (readout) {
-      readout.innerHTML = `input <strong>${formatNum(scrubValue)}</strong> → revolution <strong>${formatNum(revolutions)}</strong> → angle <strong>${formatNum(angleMod)}°</strong>`;
-    }
+  // Resolver / piecewise_resolver / multi_resolver editors no longer
+  // render an SVG dial preview — the dial+scrub block was removed in
+  // favour of a simpler text-only editor. Bail early for those kinds
+  // so live mutations don't try to update an SVG that isn't there.
+  if (tplCh.kind === 'resolver'
+      || tplCh.kind === 'piecewise_resolver'
+      || tplCh.kind === 'multi_resolver') {
     return;
   }
   let bps;
@@ -1501,27 +1439,6 @@ function renderResolverPairEditor(pn, channelIdx, tplCh, liveCh, partnerTpl, par
         <span class="cal-count">${formatNum(inputMin)}–${formatNum(inputMax)} → ${formatNum(angleMin)}°–${formatNum(angleMax)}°</span>
       </div>
       ${warningBanner}
-      <div class="cal-dial-wrap">
-        <svg class="cal-dial-svg" id="cal-curve-${channelKey}"
-             viewBox="0 0 240 200"
-             xmlns="http://www.w3.org/2000/svg">
-          ${renderResolverDialSvg({ inputMin, inputMax, angleMin, angleMax, peakVolts, belowMin, scrubValue })}
-        </svg>
-        <div class="cal-dial-scrub">
-          <label>Test input value
-            <input type="range"
-                   min="${formatNum(inputMin)}" max="${formatNum(inputMax)}"
-                   step="${formatNum((inputMax - inputMin) / 200)}"
-                   value="${formatNum(scrubValue)}"
-                   id="cal-scrub-${channelKey}"
-                   oninput="setResolverScrubLive('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',this.value)"/>
-          </label>
-          <div class="cal-dial-scrub-readout" id="cal-scrub-readout-${channelKey}">
-            input <strong>${formatNum(scrubValue)}</strong>
-            → angle <strong>${formatNum(scrubAngle({ inputMin, inputMax, angleMin, angleMax, belowMin, scrubValue }))}°</strong>
-          </div>
-        </div>
-      </div>
       <div class="calibration-trim-grid">
         <label>Sim value at lower stop
           <input type="number" step="any" value="${formatNum(inputMin)}"
@@ -1667,10 +1584,22 @@ function renderPiecewiseResolverPairEditor(pn, channelIdx, tplCh, liveCh, partne
   // typed into the number input directly (needed for piecewise_resolver
   // gauges like ADI pitch where angles exceed 360° to keep interpolation
   // monotonic across the wrap).
+  //
+  // Slider range: derived from the breakpoint table's actual angle span
+  // with 10° padding either side, then clamped to a sensible floor of
+  // ±360°. The previous hardcoded 0..360 range mis-clamped negative
+  // angles (10-0335-01 pitch -90..+90 stuck the bottom 6 dots at 0)
+  // and clipped monotonic-encoded ADI pitch tables that go past 360°
+  // (10-1084 climbs to ~555°).
+  const angleVals = bps.map(b => Number(b.angle ?? 0)).filter(v => Number.isFinite(v));
+  const angleLo = angleVals.length ? Math.min(...angleVals) : 0;
+  const angleHi = angleVals.length ? Math.max(...angleVals) : 360;
+  const sliderMin = Math.min(angleLo - 10, -360);
+  const sliderMax = Math.max(angleHi + 10,  360);
   const tableRows = bps.map((bp, i) => {
     const rowKey = `cal-piecewise-resolver-${channelKey}-${i}`;
     const angleVal = Number(bp.angle ?? 0);
-    const sliderVal = Math.max(0, Math.min(360, angleVal));
+    const sliderVal = Math.max(sliderMin, Math.min(sliderMax, angleVal));
     return `
     <div class="calibration-piecewise-row calibration-piecewise-row-edit" id="${rowKey}">
       <div class="calibration-piecewise-idx">${i + 1}</div>
@@ -1678,7 +1607,7 @@ function renderPiecewiseResolverPairEditor(pn, channelIdx, tplCh, liveCh, partne
              onchange="setPiecewiseResolverField('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${i},'input',this.value)"
              title="Sim input value at this breakpoint."/>
       <div class="cal-slider-wrap">
-        <input type="range" min="0" max="360" step="0.1" value="${sliderVal}"
+        <input type="range" min="${sliderMin}" max="${sliderMax}" step="0.1" value="${sliderVal}"
                id="${rowKey}-slider"
                oninput="setPiecewiseResolverAngleLive('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',${i},this.value)"
                title="Drag to nudge the reference angle for this breakpoint."/>
@@ -1698,27 +1627,6 @@ function renderPiecewiseResolverPairEditor(pn, channelIdx, tplCh, liveCh, partne
         <div class="calibration-channel-id">Resolver pair · ${escHtml(roleSummaryFromIds(tplCh.id, partnerTpl?.id))}</div>
         <span class="cal-tag cal-tag-piecewise_resolver">piecewise resolver</span>
         <span class="cal-count">${bps.length} pts · ${formatNum(inputMin)}..${formatNum(inputMax)}</span>
-      </div>
-      <div class="cal-dial-wrap">
-        <svg class="cal-dial-svg" id="cal-curve-${channelKey}"
-             viewBox="0 0 240 200"
-             xmlns="http://www.w3.org/2000/svg">
-          ${renderPiecewiseResolverDialSvg({ bps, scrubValue, needleAngle })}
-        </svg>
-        <div class="cal-dial-scrub">
-          <label>Test input value
-            <input type="range"
-                   min="${formatNum(inputMin)}" max="${formatNum(inputMax)}"
-                   step="${formatNum((inputMax - inputMin) / 200)}"
-                   value="${formatNum(scrubValue)}"
-                   id="cal-scrub-${channelKey}"
-                   oninput="setResolverScrubLive('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',this.value)"/>
-          </label>
-          <div class="cal-dial-scrub-readout" id="cal-scrub-readout-${channelKey}">
-            input <strong>${formatNum(scrubValue)}</strong>
-            → angle <strong>${needleAngle === null ? 'rest' : formatNum(needleAngle % 360) + '°'}</strong>
-          </div>
-        </div>
       </div>
       <details class="calibration-piecewise-table-disclosure" open>
         <summary>Reference angle table (${bps.length} breakpoints)</summary>
@@ -1884,28 +1792,6 @@ function renderMultiResolverPairEditor(pn, channelIdx, tplCh, liveCh, partnerTpl
         <div class="calibration-channel-id">Multi-turn resolver · ${escHtml(roleSummaryFromIds(tplCh.id, partnerTpl?.id))}</div>
         <span class="cal-tag cal-tag-multi_resolver">multi-turn resolver</span>
         <span class="cal-count">${formatNum(unitsPerRevolution)} per rev</span>
-      </div>
-      <div class="cal-dial-wrap">
-        <svg class="cal-dial-svg" id="cal-curve-${channelKey}"
-             viewBox="0 0 240 200"
-             xmlns="http://www.w3.org/2000/svg">
-          ${renderMultiResolverDialSvg({ scrubValue, angleMod })}
-        </svg>
-        <div class="cal-dial-scrub">
-          <label>Test input value
-            <input type="range"
-                   min="${formatNum(scrubMin)}" max="${formatNum(scrubMax)}"
-                   step="${formatNum((scrubMax - scrubMin) / 400)}"
-                   value="${formatNum(scrubValue)}"
-                   id="cal-scrub-${channelKey}"
-                   oninput="setResolverScrubLive('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}',this.value)"/>
-          </label>
-          <div class="cal-dial-scrub-readout" id="cal-scrub-readout-${channelKey}">
-            input <strong>${formatNum(scrubValue)}</strong>
-            → revolution <strong>${formatNum(revolutions)}</strong>
-            → angle <strong>${formatNum(angleMod)}°</strong>
-          </div>
-        </div>
       </div>
       <details class="calibration-resolver-advanced" ${advOpen ? 'open' : ''}
                onclick="event.stopPropagation()"
