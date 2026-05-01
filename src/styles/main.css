@@ -464,7 +464,9 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
 .map-channel-row,
 .map-channel-header {
   display: grid;
-  grid-template-columns: 28px minmax(160px, 1fr) 14px 1fr 80px 100px;
+  /* 1st column = skip toggle (sized for the checkbox + "skip" label),
+     then role / port / arrow / driver / board / output. */
+  grid-template-columns: 56px 28px minmax(160px, 1fr) 14px 1fr 80px 100px;
   gap: 6px;
   align-items: center;
 }
@@ -491,11 +493,36 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
 .map-channel-conflict {
   font-size: 10px;
   color: var(--text-danger);
-  /* Indent past the role + port columns so the message lines up with the
-     driver/board/output dropdowns it's about. */
-  padding: 0 0 4px calc(28px + 6px + 160px + 6px + 14px + 6px);
+  /* Indent past the skip + role + port + arrow columns so the message
+     lines up with the driver/board/output dropdowns it's about. */
+  padding: 0 0 4px calc(56px + 6px + 28px + 6px + 160px + 6px + 14px + 6px);
   cursor: help;
 }
+/* Per-row skip toggle — small checkbox + label. Compact so it slots into
+   the grid's 7th column without forcing a row reflow. */
+.map-channel-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.map-channel-skip input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+/* Skipped row: dim the entire row so the user sees at a glance which
+   ports are intentionally not driven. Dropdowns are also disabled
+   (and styled-disabled by the existing :disabled rule). The label
+   text on the port keeps its color so the user can still read what
+   port they're skipping. */
+.map-channel-row-skipped {
+  opacity: 0.55;
+}
+.map-channel-row-skipped .map-channel-skip { opacity: 1; }
 
 /* ── Hardware tab ── */
 .hardware-status-badge {

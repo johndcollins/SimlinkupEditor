@@ -106,6 +106,17 @@ function onSetSourceForInputPort(pn, port, kind, value) {
 
 function onSetDriverForOutputPort(pn, port, kind, driver) {
   const p = profiles[activeIdx];
+  // If the user is picking a driver, they DO want this port wired —
+  // clear any "intentionally skipped" flag so the row stops being
+  // greyed out and the dropdowns enable. Persist in the background;
+  // the handler's own renderMappings() below paints the new state.
+  if (driver) {
+    const key = _skipKey(p.name, pn, port);
+    if (_skipPorts.has(key)) {
+      _skipPorts.delete(key);
+      persistSkipPorts();  // fire-and-forget
+    }
+  }
   const edge = ensureStageTwoEdge(p, pn, port, kind);
   edge.dstDriver = driver || null;
   edge.dstDriverDevice = null;
@@ -151,6 +162,85 @@ let _channelConflicts = new Map();
 // background but skips the per-row text. The banner above the cards
 // explains the root cause once.
 let _suppressInvalidRowHint = false;
+
+// ── Intentionally-skipped output ports ───────────────────────────────────────
+// Some gauges expose outputs that not every rig drives — the standby ADI's
+// digital OFF flag is the canonical example. The user can mark such an
+// output "skip" so the gauge's completion pill doesn't count it as missing
+// and the per-row "shared" / "kind mismatch" warnings don't fire.
+//
+// State shape: a flat Set keyed by "<profileName>|<pn>|<portId>". Persisted
+// in settings.json under skipPorts so the choice survives across sessions.
+// Per-profile-scoped (different rigs may have different idle outputs).
+//
+// Hydrated on selectProfile (renderer-side), persisted on toggle, pruned
+// on profile delete. Mirrors the auto-save persistence pattern.
+const _skipPorts = new Set();
+
+function _skipKey(profileName, pn, portId) { return `${profileName}|${pn}|${portId}`; }
+
+function isPortSkipped(pn, portId) {
+  const p = profiles[activeIdx];
+  if (!p) return false;
+  return _skipPorts.has(_skipKey(p.name, pn, portId));
+}
+
+async function setPortSkipped(pn, portId, skip) {
+  const p = profiles[activeIdx];
+  if (!p) return;
+  const key = _skipKey(p.name, pn, portId);
+  if (skip) _skipPorts.add(key); else _skipPorts.delete(key);
+  await persistSkipPorts();
+  rebuildInstrumentView(p);
+  renderMappings();
+}
+
+// Settings.json round-trip helpers, mirror of the gauge auto-save pair.
+async function persistSkipPorts() {
+  const p = profiles[activeIdx];
+  if (!p) return;
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.skipPorts) || {};
+    const prefix = `${p.name}|`;
+    for (const k of Object.keys(map)) {
+      if (k.startsWith(prefix)) delete map[k];
+    }
+    for (const k of _skipPorts) {
+      if (k.startsWith(prefix)) map[k] = true;
+    }
+    await window.api.saveSettings({ skipPorts: map });
+  } catch {}
+}
+
+async function hydrateSkipPorts() {
+  // Wipe all entries — a fresh hydrate is authoritative for whatever
+  // profile we just switched to.
+  _skipPorts.clear();
+  const p = profiles[activeIdx];
+  if (!p) return;
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.skipPorts) || {};
+    const prefix = `${p.name}|`;
+    for (const [k, v] of Object.entries(map)) {
+      if (v && k.startsWith(prefix)) _skipPorts.add(k);
+    }
+  } catch {}
+}
+
+async function pruneSkipPortsForProfile(profileName) {
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.skipPorts) || {};
+    const prefix = `${profileName}|`;
+    let changed = false;
+    for (const k of Object.keys(map)) {
+      if (k.startsWith(prefix)) { delete map[k]; changed = true; }
+    }
+    if (changed) await window.api.saveSettings({ skipPorts: map });
+  } catch {}
+}
 
 function buildChannelConflictMap(edges) {
   const map = new Map();
@@ -267,6 +357,11 @@ function computeGaugeCompletion(inst, p) {
     let groupDriver = null;
     let driverConflict = false;
     for (const portTpl of group.ports) {
+      // Ports the user explicitly marked "skip" don't need to be wired —
+      // they count as satisfied for completion purposes. Used for outputs
+      // the rig deliberately doesn't drive (e.g. standby ADI's digital
+      // OFF flag on rigs without a digital out for it).
+      if (isPortSkipped(inst.pn, portTpl.port)) continue;
       const edge = p.chain.edges.find(e =>
         e.stage === 2 && e.srcGaugePn === inst.pn && e.srcGaugePort === portTpl.port
       );
@@ -433,6 +528,7 @@ function renderOutputGroup(inst, group, view) {
       <div></div>
       <div></div>
       <div></div>
+      <div></div>
       <div>Driver</div>
       <div>Board</div>
       <div>Output</div>
@@ -453,6 +549,7 @@ function renderOutputChannelRow(inst, group, portTpl) {
   const edge = p.chain.edges.find(e => e.stage === 2 && e.srcGaugePn === inst.pn && e.srcGaugePort === portTpl.port);
   const driver = edge?.dstDriver || '';
   const hint = driver ? effectiveDriverHint(driver) : null;
+  const skipped = isPortSkipped(inst.pn, portTpl.port);
 
   // Driver dropdown — only declared drivers are selectable. Undeclared ones
   // are shown disabled so the user understands the option exists but needs
@@ -491,9 +588,12 @@ function renderOutputChannelRow(inst, group, portTpl) {
   const roleLabel = portTpl.role === 'sin' ? 'sin' : portTpl.role === 'cos' ? 'cos' : '';
 
   // Conflict check: is this row's destination shared with other edges?
+  // Skipped ports never warn — the user explicitly opted out, so flagging
+  // a "shared with N other" or "kind mismatch" for an intentionally-blank
+  // row would be noise.
   let conflictHtml = '';
-  let rowClass = 'map-channel-row';
-  if (edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
+  let rowClass = 'map-channel-row' + (skipped ? ' map-channel-row-skipped' : '');
+  if (!skipped && edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
     const key = `${edge.dstDriver}|${edge.dstDriverDevice ?? ''}|${edge.dstDriverChannel}`;
     const sharing = _channelConflicts.get(key);
     if (sharing && sharing.length > 1) {
@@ -518,7 +618,7 @@ function renderOutputChannelRow(inst, group, portTpl) {
   // classified (e.g. PHCC, which has both analog and digital outs)
   // are treated as 'unknown' and skipped.
   let kindMismatchHtml = '';
-  if (edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
+  if (!skipped && edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
     const driverKind = DRIVER_CHANNEL_KIND[edge.dstDriver];
     if (driverKind && portTpl.kind && driverKind !== portTpl.kind) {
       rowClass += ' map-channel-row-conflict';
@@ -529,20 +629,40 @@ function renderOutputChannelRow(inst, group, portTpl) {
     }
   }
 
+  // Skip toggle — small checkbox + label to the right of the channel
+  // dropdown. When checked, the row's dropdowns disable and completion
+  // counts the port as satisfied. Tooltip explains the intent so a future
+  // user inheriting the profile understands why a port is intentionally
+  // blank.
+  const skipToggleHtml = `
+    <label class="map-channel-skip"
+           title="Mark this output as intentionally not wired. The gauge's completion pill won't count it as missing.">
+      <input type="checkbox" ${skipped ? 'checked' : ''}
+             onchange="setPortSkipped('${inst.pn}','${portTpl.port}', this.checked)"/>
+      <span>skip</span>
+    </label>`;
+
+  // Dropdowns are disabled when skipped — picking a driver while the row
+  // is marked skip would be contradictory. To wire the port, the user
+  // unchecks skip first.
+  const dropdownsDisabled = skipped;
+
   return `
     <div class="${rowClass}">
+      ${skipToggleHtml}
       <div class="map-channel-role">${escHtml(roleLabel)}</div>
       <div class="map-channel-port">${inst.pn.replace(/-/g, '')}_${escHtml(portTpl.port)}</div>
       <div class="map-channel-arrow">→</div>
       <select data-output-driver="${escHtml(portTpl.port)}"
+              ${dropdownsDisabled ? 'disabled' : ''}
               onchange="onSetDriverForOutputPort('${inst.pn}','${portTpl.port}','${portTpl.kind}',this.value)">
         ${driverOpts}
       </select>
-      <select data-output-device="${escHtml(portTpl.port)}" ${driver ? '' : 'disabled'}
+      <select data-output-device="${escHtml(portTpl.port)}" ${(driver && !dropdownsDisabled) ? '' : 'disabled'}
               onchange="onSetChannelForOutputPort('${inst.pn}','${portTpl.port}','device',this.value)">
         ${deviceOpts}
       </select>
-      <select data-output-channel="${escHtml(portTpl.port)}" ${driver ? '' : 'disabled'}
+      <select data-output-channel="${escHtml(portTpl.port)}" ${(driver && !dropdownsDisabled) ? '' : 'disabled'}
               onchange="onSetChannelForOutputPort('${inst.pn}','${portTpl.port}','channel',this.value)">
         ${channelOpts}
       </select>

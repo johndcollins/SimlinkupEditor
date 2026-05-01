@@ -1,7 +1,7 @@
 [
   {
     "pn": "10-0194",
-    "name": "Mach / airspeed indicator",
+    "name": "Simtek P/N 10-0194 - Mach / airspeed indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100194HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -54,7 +54,7 @@
   },
   {
     "pn": "10-0207",
-    "name": "Tachometer (RPM)",
+    "name": "Simtek P/N 10-0207 - Tachometer (RPM)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100207HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -90,7 +90,7 @@
   },
   {
     "pn": "10-0207_110",
-    "name": "Tachometer (RPM) v2",
+    "name": "Simtek P/N 10-0207_110 - Tachometer (RPM) v2",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100207_110HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -126,7 +126,7 @@
   },
   {
     "pn": "10-0216",
-    "name": "FTIT indicator",
+    "name": "Simtek P/N 10-0216 - FTIT indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100216HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -162,7 +162,7 @@
   },
   {
     "pn": "10-0285",
-    "name": "Altimeter",
+    "name": "Simtek P/N 10-0285 - Altimeter",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100285HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -228,7 +228,7 @@
   },
   {
     "pn": "10-0294",
-    "name": "Fuel quantity indicator",
+    "name": "Simtek P/N 10-0294 - Fuel quantity indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100294HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -300,7 +300,7 @@
   },
   {
     "pn": "10-0295",
-    "name": "Fuel flow indicator",
+    "name": "Simtek P/N 10-0295 - Fuel flow indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100295HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -336,7 +336,7 @@
   },
   {
     "pn": "10-0335-01",
-    "name": "Standby ADI",
+    "name": "Simtek P/N 10-0335-01 - Standby ADI",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek100335015HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "attitude",
@@ -422,7 +422,7 @@
   },
   {
     "pn": "10-0581-02",
-    "name": "Vertical velocity indicator (VVI)",
+    "name": "Simtek P/N 10-0581-02 - Vertical velocity indicator (VVI)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10058102HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -465,7 +465,7 @@
   },
   {
     "pn": "10-0582-01",
-    "name": "Angle of attack indicator",
+    "name": "Simtek P/N 10-0582-01 - Angle of attack indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10058201HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -508,7 +508,7 @@
   },
   {
     "pn": "10-1078",
-    "name": "Cabin pressure altimeter",
+    "name": "Simtek P/N 10-1078 - Cabin pressure altimeter",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101078HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -544,7 +544,7 @@
   },
   {
     "pn": "10-1079",
-    "name": "Standby compass",
+    "name": "Simtek P/N 10-1079 - Standby compass",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101079HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -586,7 +586,7 @@
   },
   {
     "pn": "10-1081",
-    "name": "Altimeter (v2)",
+    "name": "Simtek P/N 10-1081 - Altimeter (v2)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101081HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -646,7 +646,7 @@
   },
   {
     "pn": "10-1082",
-    "name": "Airspeed / Mach indicator",
+    "name": "Simtek P/N 10-1082 - Airspeed / Mach indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101082HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -700,7 +700,7 @@
   },
   {
     "pn": "10-1084",
-    "name": "Standby ADI (v2)",
+    "name": "Simtek P/N 10-1084 - Standby ADI (v2)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101084HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "attitude",
@@ -786,7 +786,7 @@
   },
   {
     "pn": "10-1088",
-    "name": "Nozzle position indicator",
+    "name": "Simtek P/N 10-1088 - Nozzle position indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101088HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -828,7 +828,7 @@
   },
   {
     "pn": "10-1089-02",
-    "name": "Fuel quantity indicator (v2)",
+    "name": "Simtek P/N 10-1089-02 - Fuel quantity indicator (v2)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek10108902HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -900,7 +900,7 @@
   },
   {
     "pn": "10-1090",
-    "name": "EPU fuel quantity indicator",
+    "name": "Simtek P/N 10-1090 - EPU fuel quantity indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101090HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -936,7 +936,7 @@
   },
   {
     "pn": "10-1091",
-    "name": "Engine oil pressure indicator",
+    "name": "Simtek P/N 10-1091 - Engine oil pressure indicator",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek101091HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -978,7 +978,7 @@
   },
   {
     "pn": "10-5859",
-    "name": "Standby attitude indicator (10-5859)",
+    "name": "Simtek P/N 10-5859 - Standby attitude indicator (10-5859)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105859HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "flight",
@@ -1044,7 +1044,7 @@
   },
   {
     "pn": "10-5860",
-    "name": "Fuel flow indicator (10-5860)",
+    "name": "Simtek P/N 10-5860 - Fuel flow indicator (10-5860)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105860HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -1080,7 +1080,7 @@
   },
   {
     "pn": "10-5862",
-    "name": "Nozzle position indicator (10-5862)",
+    "name": "Simtek P/N 10-5862 - Nozzle position indicator (10-5862)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105862HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "engine",
@@ -1122,7 +1122,7 @@
   },
   {
     "pn": "10-5866",
-    "name": "Fuel quantity indicator (10-5866)",
+    "name": "Simtek P/N 10-5866 - Fuel quantity indicator (10-5866)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105866HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",
@@ -1194,7 +1194,7 @@
   },
   {
     "pn": "10-5868",
-    "name": "EPU fuel quantity indicator (10-5868)",
+    "name": "Simtek P/N 10-5868 - EPU fuel quantity indicator (10-5868)",
     "cls": "SimLinkup.HardwareSupport.Simtek.Simtek105868HardwareSupportModule",
     "manufacturer": "Simtek",
     "cat": "fuel",

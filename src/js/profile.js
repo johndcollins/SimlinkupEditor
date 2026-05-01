@@ -91,6 +91,9 @@ async function selectProfile(i) {
   // profile + PN. Hydrate before renderEditor() so the Calibration tab
   // paints with the right checkbox state on first render.
   if (typeof hydrateGaugeAutoSave === 'function') await hydrateGaugeAutoSave();
+  // Per-port "intentionally not wired" flags are also persisted in
+  // settings.json keyed by profile + pn + portId. Hydrate before render.
+  if (typeof hydrateSkipPorts === 'function') await hydrateSkipPorts();
   // Fallback load — only needed for profiles created this session before saving
   if (!p.loaded && mappingDir) {
     try {
@@ -136,6 +139,9 @@ async function deleteProfile() {
   // settings.json doesn't accumulate dangling entries.
   if (typeof pruneGaugeAutoSaveForProfile === 'function') {
     await pruneGaugeAutoSaveForProfile(p.name);
+  }
+  if (typeof pruneSkipPortsForProfile === 'function') {
+    await pruneSkipPortsForProfile(p.name);
   }
   profiles.splice(activeIdx, 1);
   activeIdx = null;
