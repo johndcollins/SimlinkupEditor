@@ -1097,6 +1097,53 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
   margin-top: 8px;
   display: flex;
   gap: 6px;
+  align-items: center;
+}
+/* Per-gauge actions cluster (Save + Auto-save toggle) in the card header
+   summary row, sitting between the title and the "Reset to defaults"
+   button. Inline-flex so the button + checkbox sit side-by-side, with
+   a small gap between them. The wrapping span swallows clicks so
+   users can hit either control without toggling the <details> open. */
+.calibration-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+}
+.cal-btn-save {
+  background: #22c55e;
+  color: #fff;
+  border: 1px solid #16a34a;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cal-btn-save:hover:not(:disabled) { background: #16a34a; }
+.cal-btn-save:disabled {
+  background: var(--bg-card-subtle, #e5e7eb);
+  color: var(--text-secondary, #94a3b8);
+  border-color: var(--border, #cbd5e1);
+  cursor: not-allowed;
+}
+/* Auto-save toggle — sits inline next to the Save button so the user can
+   flip the mode right where the action it controls lives. The "after 1
+   sec" hint is muted so the label stays readable at a glance. */
+.cal-autosave-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  margin-left: 8px;
+}
+.cal-autosave-toggle input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
 }
 
 /* Trim grid: 2 columns side-by-side; matches the Hardware Config board grid

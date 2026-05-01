@@ -677,6 +677,33 @@ function mappingFilenameForGauge(pn, inst) {
   return `${safe}.mapping`;
 }
 
+// Returns true when the stage-2 edge wires a gauge output to a driver
+// channel of incompatible kind (e.g. a digital OFF-flag drive into an
+// analog DAC channel). SimLinkup's Runtime.cs blindly casts the
+// destination signal to match the source's class, so a mismatched
+// .mapping crashes the runtime — we skip these edges in the writer
+// rather than persist a file that would brick SimLinkup. The Mappings
+// tab already shows a red "⚠ kind mismatch" badge on the offending
+// row so the user knows nothing was saved for that wiring.
+//
+// Stage-1 edges (sim → gauge) skip this check; the matching stage-1
+// validator in tab-mappings.js handles the source side.
+//
+// Returns false when DRIVER_CHANNEL_KIND doesn't classify the driver
+// (e.g. PHCC has mixed analog/digital outputs) — those edges are
+// always persisted; the runtime crash is on the user.
+function isKindMismatchedStage2Edge(e) {
+  if (!e || e.stage !== 2) return false;
+  if (!e.dstDriver || e.dstDriverChannel == null || e.dstDriverChannel === '') return false;
+  const driverKind = DRIVER_CHANNEL_KIND[e.dstDriver];
+  if (!driverKind) return false;  // unknown driver — don't second-guess
+  // The edge's `kind` is the gauge port's kind (analog/digital), set
+  // by classifyMapping when the edge was first parsed. Mismatches are
+  // exactly the case where these two values disagree.
+  if (!e.kind) return false;
+  return driverKind !== e.kind;
+}
+
 function renderMappingXml(edges) {
   const lines = [
     '<?xml version="1.0"?>',
@@ -685,6 +712,10 @@ function renderMappingXml(edges) {
   ];
   for (const e of edges) {
     if (!e.src || !e.dst) continue;
+    // Skip kind-mismatched stage-2 edges. The renderer already shows
+    // the user a red "⚠ kind mismatch" warning on the row; persisting
+    // it would just crash SimLinkup at load time.
+    if (isKindMismatchedStage2Edge(e)) continue;
     const type = e.kind === 'digital' ? 'DigitalSignal' : 'AnalogSignal';
     lines.push('    <SignalMapping>');
     lines.push(`      <Source xsi:type="${type}">`);

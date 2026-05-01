@@ -81,6 +81,16 @@ async function openFolder() {
 async function selectProfile(i) {
   activeIdx = i;
   const p = profiles[i];
+  // Per-gauge dirty flags are scoped to the active profile — switching
+  // profiles wipes them so the new profile's Save buttons start
+  // disabled, regardless of any pending edits left in the previous
+  // profile (those should have already been auto-saved or saved
+  // manually before the switch).
+  if (typeof _gaugeDirty !== 'undefined') _gaugeDirty.clear();
+  // Per-gauge auto-save flags are persisted in settings.json keyed by
+  // profile + PN. Hydrate before renderEditor() so the Calibration tab
+  // paints with the right checkbox state on first render.
+  if (typeof hydrateGaugeAutoSave === 'function') await hydrateGaugeAutoSave();
   // Fallback load — only needed for profiles created this session before saving
   if (!p.loaded && mappingDir) {
     try {
@@ -121,6 +131,11 @@ async function deleteProfile() {
   if (mappingDir) {
     const result = await window.api.deleteProfile(mappingDir + '/' + p.name);
     if (!result.success) { toast('Error: ' + result.error); return; }
+  }
+  // Drop any persisted per-gauge auto-save flags for this profile so
+  // settings.json doesn't accumulate dangling entries.
+  if (typeof pruneGaugeAutoSaveForProfile === 'function') {
+    await pruneGaugeAutoSaveForProfile(p.name);
   }
   profiles.splice(activeIdx, 1);
   activeIdx = null;
@@ -183,6 +198,9 @@ async function saveProfile() {
   });
   if (result.success) {
     p.loaded = true;
+    // Full-profile save writes every gauge config too — clear the
+    // per-gauge dirty flags so the Calibration tab Save buttons disable.
+    if (typeof _gaugeDirty !== 'undefined') _gaugeDirty.clear();
     toast('Profile saved to ' + result.path);
     document.getElementById('saveStatus').textContent = 'Saved ✓';
     document.getElementById('saveStatus').className = 'status-msg status-ok';

@@ -254,6 +254,18 @@ function renderGaugeCalibrationCard(pn) {
   // breakpoint table below.
   const liveHtml = renderLiveCalibration(pn) || '';
 
+  // Per-gauge actions (Save + Auto-save toggle + Reset) live in the card
+  // header so they're scoped to the whole gauge, not duplicated per
+  // channel. Clicks on these MUST NOT toggle the <details> open state —
+  // the inline preventDefault/stopPropagation handlers and the wrapping
+  // span (which also stops propagation) handle that.
+  const headerActions = (status !== 'no-defaults')
+    ? `<span class="calibration-card-actions"
+             onclick="event.stopPropagation()">
+         ${renderGaugeSaveButtonHtml(pn)}
+       </span>`
+    : '';
+
   card.innerHTML = `
     <summary class="calibration-card-head calibration-card-head-${status}">
       <span class="calibration-card-chevron" aria-hidden="true">▸</span>
@@ -261,11 +273,228 @@ function renderGaugeCalibrationCard(pn) {
         <div class="calibration-card-title">${escHtml(inst?.name || pn)}</div>
         <div class="calibration-card-pn">P/N ${escHtml(pn)}</div>
       </div>
+      ${headerActions}
       <button class="btn-sm" onclick="event.preventDefault(); event.stopPropagation(); resetGaugeCalibration('${escHtml(pn)}')">Reset to defaults</button>
       <span class="calibration-pill calibration-pill-${status}" title="${escHtml(pillTitle)}">${escHtml(pillText)}</span>
     </summary>
     <div class="calibration-card-body">${liveHtml}${channelHtml}${extraHtml}</div>`;
   return card;
+}
+
+// Per-gauge auto-save state — transient (lives only in this session, not
+// persisted on the profile).
+//   _gaugeAutoSaveOn: Set<pn>      — gauges with auto-save toggled on
+//   _gaugeAutoSaveTimer: Map<pn,id> — pending debounce timeouts for slider drag
+//   _gaugeDirty: Set<pn>           — gauges with unsaved edits since last
+//                                    save-to-disk. Distinct from
+//                                    "differs from spec defaults" — a
+//                                    gauge can differ from defaults yet
+//                                    be clean (just-saved). The Save
+//                                    button enabled-check uses dirty, not
+//                                    edited.
+// Auto-save is a calibration-session helper. The user flips it on while
+// tuning a single gauge against a live SimLinkup; the toggle going away
+// at the end of the session is fine.
+const _gaugeAutoSaveOn = new Set();
+const _gaugeAutoSaveTimer = new Map();
+const _gaugeDirty = new Set();
+const AUTO_SAVE_DEBOUNCE_MS = 1000;
+
+function isGaugeAutoSaveOn(pn) { return _gaugeAutoSaveOn.has(pn); }
+function markGaugeDirty(pn) { _gaugeDirty.add(pn); }
+function clearGaugeDirty(pn) { _gaugeDirty.delete(pn); }
+function isGaugeDirty(pn) { return _gaugeDirty.has(pn); }
+
+// Render the per-gauge Save button + auto-save toggle pair. Co-located so
+// they share the same row and the user can flip the mode right next to
+// the action it controls. Both are disabled when the gauge has no
+// editor (status === 'no-defaults') — handled by the caller checking
+// before invoking.
+function renderGaugeSaveButtonHtml(pn) {
+  const p = profiles[activeIdx];
+  if (!p) return '';
+  const autoOn = isGaugeAutoSaveOn(pn);
+  // Save button is disabled when there are no unsaved edits OR when
+  // auto-save is on (the toggle takes over the responsibility —
+  // pressing the button would just duplicate work). Note that "dirty"
+  // is "edits since last save-to-disk", NOT "differs from spec defaults"
+  // — saving clears dirty even though the in-memory state still differs
+  // from defaults.
+  const dirty = isGaugeDirty(pn);
+  const saveDisabled = autoOn || !dirty;
+  const saveTitle = autoOn
+    ? 'Auto-save is on — edits save automatically 1s after the last change'
+    : (saveDisabled
+        ? 'No unsaved edits for this gauge'
+        : `Writes only this gauge's ${gaugeConfigFilenameForPn(pn) || 'calibration'} file`);
+  // data-gauge-pn lets refreshGaugeSaveButtons() find every Save button
+  // for a given gauge after a slider/typed-input edit, so the button can
+  // flip enabled without a full re-render (which would steal focus from
+  // whatever input the user is currently typing into).
+  const saveBtn = `<button class="cal-btn cal-btn-save" data-gauge-pn="${escHtml(pn)}"
+                          ${saveDisabled ? 'disabled' : ''}
+                          title="${escHtml(saveTitle)}"
+                          onclick="saveCurrentGaugeCalibration('${escHtml(pn)}')">
+                    Save calibration
+                  </button>`;
+  const autoToggle = `<label class="cal-autosave-toggle"
+                             title="When on, edits to this gauge are saved automatically. Typed values, add/remove breakpoint, and Reset save immediately; slider drags save 1 second after you stop.">
+                       <input type="checkbox" data-gauge-autosave-pn="${escHtml(pn)}"
+                              ${autoOn ? 'checked' : ''}
+                              onchange="setGaugeAutoSave('${escHtml(pn)}', this.checked)"/>
+                       <span>Auto-save</span>
+                     </label>`;
+  return `${saveBtn}${autoToggle}`;
+}
+
+// Toggle the disabled/title state of every per-gauge Save button for `pn`
+// without re-rendering. Called from the slider + typed-input handlers,
+// which deliberately skip renderCalibration() to preserve input focus.
+function refreshGaugeSaveButtons(pn) {
+  const p = profiles[activeIdx];
+  if (!p) return;
+  const autoOn = isGaugeAutoSaveOn(pn);
+  const dirty = isGaugeDirty(pn);
+  const disabled = autoOn || !dirty;
+  const filename = gaugeConfigFilenameForPn(pn) || 'calibration';
+  const title = autoOn
+    ? 'Auto-save is on — edits save automatically 1s after the last change'
+    : (disabled
+        ? 'No unsaved edits for this gauge'
+        : `Writes only this gauge's ${filename} file`);
+  const escapedPn = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(pn) : pn;
+  document.querySelectorAll(`.cal-btn-save[data-gauge-pn="${escapedPn}"]`).forEach(btn => {
+    btn.disabled = disabled;
+    btn.title = title;
+  });
+  // Multi-channel gauges render one toggle per channel; keep them in
+  // sync so flipping one doesn't leave others stale.
+  document.querySelectorAll(`input[data-gauge-autosave-pn="${escapedPn}"]`).forEach(cb => {
+    cb.checked = autoOn;
+  });
+}
+
+// Toggle auto-save for a gauge. Persists only in this session (transient).
+// When flipped on with edits already pending, save IMMEDIATELY so the
+// flag-flip itself acts as a commit (matches the "typed values save
+// immediately" rule — the toggle is a deliberate user action).
+function setGaugeAutoSave(pn, on) {
+  if (on) {
+    _gaugeAutoSaveOn.add(pn);
+    persistGaugeAutoSave();
+    refreshGaugeSaveButtons(pn);
+    // Flipping auto-save on with unsaved edits is itself a deliberate
+    // commit — write to disk now (no debounce wait).
+    if (isGaugeDirty(pn)) saveCurrentGaugeCalibration(pn, { silent: true });
+  } else {
+    _gaugeAutoSaveOn.delete(pn);
+    persistGaugeAutoSave();
+    // Cancel any pending debounce — the user explicitly turned it off.
+    const t = _gaugeAutoSaveTimer.get(pn);
+    if (t) { clearTimeout(t); _gaugeAutoSaveTimer.delete(pn); }
+    refreshGaugeSaveButtons(pn);
+  }
+}
+
+// Persist the active profile's auto-save flags to settings.json. Stored
+// flat under `gaugeAutoSave: { "<profileName>|<pn>": true }`. Per-profile
+// scoped because different profiles can be set up for different rigs;
+// the user might want auto-save on for a calibration profile and off
+// for the production one.
+async function persistGaugeAutoSave() {
+  const p = profiles[activeIdx];
+  if (!p) return;
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.gaugeAutoSave) || {};
+    // Strip every key for the active profile, then re-add the current
+    // set. Keeps other profiles' flags intact while updating ours.
+    const prefix = `${p.name}|`;
+    for (const k of Object.keys(map)) {
+      if (k.startsWith(prefix)) delete map[k];
+    }
+    for (const pn of _gaugeAutoSaveOn) {
+      map[`${prefix}${pn}`] = true;
+    }
+    await window.api.saveSettings({ gaugeAutoSave: map });
+  } catch {
+    // Persisting auto-save preference is non-critical — failing silently
+    // is fine; the toggle still works in-session.
+  }
+}
+
+// Hydrate _gaugeAutoSaveOn from settings.json for the active profile.
+// Called from selectProfile after activeIdx is set. Must be awaited
+// before the calibration tab renders so the toggles paint with the
+// correct checked state.
+async function hydrateGaugeAutoSave() {
+  _gaugeAutoSaveOn.clear();
+  const p = profiles[activeIdx];
+  if (!p) return;
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.gaugeAutoSave) || {};
+    const prefix = `${p.name}|`;
+    for (const [k, v] of Object.entries(map)) {
+      if (!v) continue;
+      if (!k.startsWith(prefix)) continue;
+      const pn = k.slice(prefix.length);
+      if (pn) _gaugeAutoSaveOn.add(pn);
+    }
+  } catch {}
+}
+
+// Drop every auto-save flag for `profileName` from settings.json. Called
+// from deleteProfile so settings don't accumulate dangling entries for
+// profiles that no longer exist on disk.
+async function pruneGaugeAutoSaveForProfile(profileName) {
+  try {
+    const settings = await window.api.loadSettings();
+    const map = (settings && settings.gaugeAutoSave) || {};
+    const prefix = `${profileName}|`;
+    let changed = false;
+    for (const k of Object.keys(map)) {
+      if (k.startsWith(prefix)) { delete map[k]; changed = true; }
+    }
+    if (changed) await window.api.saveSettings({ gaugeAutoSave: map });
+  } catch {}
+}
+
+// Schedule a debounced auto-save for `pn`, replacing any in-flight timer.
+// Called from the slider drag handlers — the user is mid-scrub, we wait
+// 1s of quiet before committing to disk so we don't flood the
+// SimLinkup-side FileSystemWatcher with a write per tick.
+function scheduleAutoSaveDebounced(pn) {
+  // Mark dirty unconditionally — even if auto-save is off, the user
+  // just made an edit and the manual Save button needs to enable.
+  // Refresh the button state in-place too, since callers commonly do
+  //   renderCalibration(); autoSaveImmediate(pn);
+  // — and the render runs BEFORE the dirty mark, so the freshly-
+  // painted button would be stuck on the stale (clean) state without
+  // this refresh.
+  markGaugeDirty(pn);
+  refreshGaugeSaveButtons(pn);
+  if (!isGaugeAutoSaveOn(pn)) return;
+  const existing = _gaugeAutoSaveTimer.get(pn);
+  if (existing) clearTimeout(existing);
+  const t = setTimeout(() => {
+    _gaugeAutoSaveTimer.delete(pn);
+    if (isGaugeAutoSaveOn(pn)) saveCurrentGaugeCalibration(pn, { silent: true });
+  }, AUTO_SAVE_DEBOUNCE_MS);
+  _gaugeAutoSaveTimer.set(pn, t);
+}
+
+// Trigger an immediate auto-save for `pn`, bypassing the debounce. Called
+// from the typed-input + add/remove/reset handlers where the edit is a
+// deliberate commit, not a mid-scrub intermediate state.
+function autoSaveImmediate(pn) {
+  markGaugeDirty(pn);
+  refreshGaugeSaveButtons(pn);
+  if (!isGaugeAutoSaveOn(pn)) return;
+  // Cancel any pending debounce — this immediate save supersedes it.
+  const existing = _gaugeAutoSaveTimer.get(pn);
+  if (existing) { clearTimeout(existing); _gaugeAutoSaveTimer.delete(pn); }
+  saveCurrentGaugeCalibration(pn, { silent: true });
 }
 
 // ── Live calibration: input range inference ────────────────────────────────
@@ -2027,7 +2256,13 @@ function setCalibrationBreakpoint(pn, channelIdx, channelId, idx, field, value) 
   // No table re-render — the input already shows the typed value and a
   // re-render would lose focus mid-edit. Validation banner / header pill
   // staleness is acceptable until the next event that does re-render
-  // (add/remove row, trim, switch tab).
+  // (add/remove row, trim, switch tab). The Save button IS refreshed
+  // in-place though — it must flip enabled the moment the user makes
+  // a real edit, otherwise they can't actually save what they just typed.
+  refreshGaugeSaveButtons(pn);
+  // Typed-input handler — fires on blur/Enter, deliberate commit. Save
+  // immediately if auto-save is on (no debounce wait).
+  autoSaveImmediate(pn);
 }
 
 // Slider drag handler: updates the model AND the sibling number input AND
@@ -2053,6 +2288,10 @@ function setCalibrationVoltsLive(pn, channelIdx, channelId, idx, value) {
     num.value = formatNum(n);
   }
   updateCalibrationCurve(pn, channelIdx);
+  refreshGaugeSaveButtons(pn);
+  // Slider drag — exploratory, debounce 1s so we don't hammer the
+  // SimLinkup-side watcher with a write per tick.
+  scheduleAutoSaveDebounced(pn);
 }
 
 function addCalibrationBreakpoint(pn, channelId) {
@@ -2070,6 +2309,7 @@ function addCalibrationBreakpoint(pn, channelId) {
   newBp[meta.attr] = Number(last[meta.attr]) || 0;
   ch.breakpoints.push(newBp);
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // 10-0285 altimeter only: drop the four legacy bare baro fields from the
@@ -2114,6 +2354,7 @@ function removeCalibrationBreakpoint(pn, channelId, idx) {
   if (ch.breakpoints.length <= 2) return;  // safety; button is disabled too
   ch.breakpoints.splice(idx, 1);
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 function setCalibrationTrim(pn, channelId, field, value) {
@@ -2129,6 +2370,7 @@ function setCalibrationTrim(pn, channelId, field, value) {
   // state. The full re-render also re-positions the slider thumb, so the
   // slider stays in sync with whatever the user typed.
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // Slider drag handler for trim fields. Updates the model AND the sibling
@@ -2150,6 +2392,8 @@ function setCalibrationTrimLive(pn, channelId, field, value) {
   if (num && document.activeElement !== num) {
     num.value = formatTrimNum(n);
   }
+  refreshGaugeSaveButtons(pn);
+  scheduleAutoSaveDebounced(pn);
 }
 
 // Slider drag handler for the peak drive voltage. Same shape as
@@ -2167,6 +2411,8 @@ function setPeakVoltsLive(pn, channelIdx, sinChannelId, value) {
   if (num && document.activeElement !== num) {
     num.value = formatTrimNum(n);
   }
+  refreshGaugeSaveButtons(pn);
+  scheduleAutoSaveDebounced(pn);
 }
 
 // Setter for digital_invert channels — toggles the invert bool. Same
@@ -2179,6 +2425,7 @@ function setCalibrationInvert(pn, channelId, value) {
   if (!ch) return;
   ch.invert = !!value;
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // Setter for piecewise_resolver breakpoint cells (input or angle) — updates
@@ -2209,6 +2456,8 @@ function setPiecewiseResolverField(pn, channelIdx, sinChannelId, idx, field, val
   // keeps focus. Header pill / edited badge will refresh on the next event
   // that does re-render (add row, switch tab, etc.).
   updateCalibrationCurve(pn, channelIdx);
+  refreshGaugeSaveButtons(pn);
+  autoSaveImmediate(pn);
 }
 
 // Slider drag handler for the piecewise_resolver angle column. Updates
@@ -2234,6 +2483,8 @@ function setPiecewiseResolverAngleLive(pn, channelIdx, sinChannelId, idx, value)
     num.value = formatNum(n);
   }
   updateCalibrationCurve(pn, channelIdx);
+  refreshGaugeSaveButtons(pn);
+  scheduleAutoSaveDebounced(pn);
 }
 
 // Insert a new breakpoint at the end of the table. Defaults: input is the
@@ -2257,6 +2508,7 @@ function addPiecewiseResolverBreakpoint(pn, sinChannelId) {
     angle: last.angle,
   });
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // Remove a breakpoint by index. Refuses to drop below 2 rows (the dial
@@ -2270,6 +2522,7 @@ function removePiecewiseResolverBreakpoint(pn, sinChannelId, idx) {
   if (ch.breakpoints.length <= 2) return;  // safety; button is disabled too
   ch.breakpoints.splice(idx, 1);
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // Linear-pattern setter: update inputMin or inputMax. Triggers a full
@@ -2287,6 +2540,7 @@ function setCalibrationLinearField(pn, channelIdx, channelId, field, value) {
   if (!Number.isFinite(n)) return;
   ch[field] = n;
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 // Live scrub-slider handler for the resolver dial preview. Updates the
@@ -2336,6 +2590,7 @@ function setCalibrationResolverField(pn, channelIdx, sinChannelId, field, value)
     return;
   }
   renderCalibration();
+  autoSaveImmediate(pn);
 }
 
 function resetGaugeCalibration(pn) {
@@ -2343,12 +2598,74 @@ function resetGaugeCalibration(pn) {
   if (!confirm(`Reset ${pn} to spec-sheet defaults? Any per-channel edits and trim values will be lost. The on-disk .config file will be re-written on next save.`)) return;
   if (!p.gaugeConfigs) p.gaugeConfigs = {};
   delete p.gaugeConfigs[pn];
-  // Mark this PN as needing the on-disk file to be overwritten on next save —
-  // without this, save.js would fall into the createOnly:true branch (no
-  // entry in p.gaugeConfigs) and the existing on-disk file would survive,
-  // making the reset feel like a no-op until the user manually deleted the
-  // file. The flag is consumed (and cleared) by save.js's per-gauge loop.
+  // Always treat Reset as "force defaults to disk." We can't reliably
+  // tell from the renderer side whether the on-disk file already
+  // matches defaults (the file may have been hand-edited outside the
+  // editor, or a prior Reset may not have been saved), so the safest
+  // mental model is: Reset = arm a write of spec defaults. The flag
+  // is consumed by save.js's per-gauge loop and cleared after the
+  // write lands.
   if (!(p._gaugeResetPending instanceof Set)) p._gaugeResetPending = new Set();
   p._gaugeResetPending.add(pn);
+  // Mark dirty BEFORE renderCalibration so the freshly-drawn header
+  // reflects the dirty state (autoSaveImmediate also marks dirty, but
+  // it runs AFTER render and would be too late to update the just-
+  // painted button DOM).
+  markGaugeDirty(pn);
+  renderCalibration();
+  // If auto-save is on, write defaults to disk now (no debounce wait).
+  // When auto-save is off, this is a no-op beyond the markGaugeDirty
+  // already done above; the user clicks Save manually.
+  autoSaveImmediate(pn);
+}
+
+// Save just one gauge's calibration .config file. Bypasses the full
+// save-profile flow so the user can iterate quickly without rewriting
+// every .mapping, both registries, and every other driver config in
+// the profile every time. Triggers SimLinkup's per-gauge
+// FileSystemWatcher on exactly the file the user touched.
+//
+// Disabled in the UI when no edits exist (see renderGaugeCalibrationCard's
+// saveDisabled logic) so a no-op click can't accidentally clobber an
+// on-disk hand-edit.
+async function saveCurrentGaugeCalibration(pn, opts) {
+  // opts.silent = true suppresses the success toast. Auto-save passes this
+  // so the user isn't bombarded with a toast every 1s during slider scrub.
+  // Errors still toast either way — silent failure would be worse than noise.
+  const silent = !!(opts && opts.silent);
+  const p = profiles[activeIdx];
+  if (!p) return;
+  if (!mappingDir) {
+    toast('No directory selected. Pick your SimLinkup Content/Mapping folder first.');
+    return;
+  }
+  const filename = gaugeConfigFilenameForPn(pn);
+  if (!filename) {
+    toast(`No on-disk filename known for ${pn}. Skipping save.`);
+    return;
+  }
+  const entry = (p.gaugeConfigs || {})[pn];
+  // renderGaugeConfigXml accepts a missing entry — it falls back to
+  // spec-sheet defaults, which is what the user wants if they just
+  // hit "Reset to defaults" and now want that reset persisted.
+  const content = renderGaugeConfigXml(pn, entry);
+  if (!content) {
+    toast(`Could not render calibration XML for ${pn}.`);
+    return;
+  }
+  const profileDir = mappingDir + '/' + p.name;
+  const result = await window.api.saveGaugeConfig({ profileDir, filename, content });
+  if (!result || !result.success) {
+    toast(`Save failed: ${result?.error || 'unknown error'}`);
+    return;
+  }
+  // Consume the reset-pending flag for this PN so a subsequent full
+  // save doesn't try to overwrite again with the same content.
+  if (p._gaugeResetPending instanceof Set) p._gaugeResetPending.delete(pn);
+  // The on-disk file now matches in-memory state — clear the dirty
+  // flag so the Save button disables (until the next mutation marks
+  // it dirty again).
+  clearGaugeDirty(pn);
+  if (!silent) toast(`Saved ${filename}`);
   renderCalibration();
 }

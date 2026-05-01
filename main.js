@@ -456,6 +456,38 @@ ${ssmModules}
   }
 });
 
+// Save just one gauge's calibration .config file. Used by the Calibration
+// tab's per-gauge Save button so the user can write only the file they
+// just edited, instead of running the full save-profile (which rewrites
+// every .mapping, both registries, and every driver config in the
+// profile). Faster, smaller blast radius, and triggers SimLinkup's
+// FileSystemWatcher on just the one file the user cares about.
+//
+// `filename` is the bare filename (e.g. "Simtek101084HardwareSupportModule.config"),
+// not a full path — the renderer doesn't get to traverse outside the
+// profile dir. `profileDir` must be the absolute path to the active
+// profile's folder.
+ipcMain.handle('save-gauge-config', async (_, { profileDir, filename, content }) => {
+  try {
+    if (!profileDir || !filename || typeof content !== 'string') {
+      return { success: false, error: 'profileDir, filename, and content are required' };
+    }
+    // Defence against ../escapes — the bare filename should have no
+    // path separators. Reject anything that does.
+    if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) {
+      return { success: false, error: 'filename must be a bare filename, not a path' };
+    }
+    if (!fs.existsSync(profileDir)) {
+      return { success: false, error: 'profile directory does not exist: ' + profileDir };
+    }
+    const cfgPath = path.join(profileDir, filename);
+    fs.writeFileSync(cfgPath, content, 'utf8');
+    return { success: true, path: cfgPath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // Delete a profile directory
 ipcMain.handle('delete-profile', async (_, profileDir) => {
   try {

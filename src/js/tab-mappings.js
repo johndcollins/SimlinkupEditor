@@ -508,6 +508,27 @@ function renderOutputChannelRow(inst, group, portTpl) {
     }
   }
 
+  // Kind-mismatch check: gauge output port kind (analog/digital) must
+  // agree with the destination driver's kind. SimLinkup's Runtime.cs
+  // blindly casts mapping.Destination to DigitalSignal when Source is
+  // digital — a digital gauge output (OFF flag) wired to an analog DAC
+  // crashes the runtime there. Surface the mismatch in the same row
+  // where conflicts show, so the user catches it before saving a
+  // .mapping file that would crash SimLinkup. Drivers we haven't
+  // classified (e.g. PHCC, which has both analog and digital outs)
+  // are treated as 'unknown' and skipped.
+  let kindMismatchHtml = '';
+  if (edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
+    const driverKind = DRIVER_CHANNEL_KIND[edge.dstDriver];
+    if (driverKind && portTpl.kind && driverKind !== portTpl.kind) {
+      rowClass += ' map-channel-row-conflict';
+      const portKindLabel = portTpl.kind === 'digital' ? 'digital' : 'analog';
+      const driverKindLabel = driverKind === 'digital' ? 'digital' : 'analog';
+      const tooltip = `Gauge port "${portTpl.port}" is ${portKindLabel}, but ${edge.dstDriver} channels are ${driverKindLabel}. SimLinkup will crash at runtime trying to cast a ${portKindLabel} signal to a ${driverKindLabel} one. Pick a ${portKindLabel}-capable driver instead.`;
+      kindMismatchHtml = `<div class="map-channel-conflict" title="${escHtml(tooltip)}">⚠ kind mismatch — ${escHtml(portKindLabel)} port wired to ${escHtml(driverKindLabel)} channel</div>`;
+    }
+  }
+
   return `
     <div class="${rowClass}">
       <div class="map-channel-role">${escHtml(roleLabel)}</div>
@@ -526,5 +547,6 @@ function renderOutputChannelRow(inst, group, portTpl) {
         ${channelOpts}
       </select>
     </div>
-    ${conflictHtml}`;
+    ${conflictHtml}
+    ${kindMismatchHtml}`;
 }

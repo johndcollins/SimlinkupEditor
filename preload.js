@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   listProfiles:     (dir)        => ipcRenderer.invoke('list-profiles', dir),
   loadProfile:      (dir)        => ipcRenderer.invoke('load-profile', dir),
   saveProfile:      (args)       => ipcRenderer.invoke('save-profile', args),
+  saveGaugeConfig:  (args)       => ipcRenderer.invoke('save-gauge-config', args),
   deleteProfile:    (dir)        => ipcRenderer.invoke('delete-profile', dir),
   openFolder:       (dir)        => ipcRenderer.invoke('open-folder', dir),
   setDefaultProfile:(args)       => ipcRenderer.invoke('set-default-profile', args),

@@ -236,3 +236,26 @@ const DRIVER_HINTS = {
   henkquadsincos: { devices: ['0x53'], channelCount: 0, channels: ['SIN_1','COS_1','SIN_2','COS_2','SIN_3','COS_3','SIN_4','COS_4'],
                     formatDestination: (d, c) => `HenkQuadSinCos[${d}]__${c}` },
 };
+
+// Channel kind per driver, used by the Mappings tab to surface a
+// "kind mismatch" warning when a digital gauge port (e.g. an OFF flag
+// drive) gets wired to an analog driver channel (or vice versa). At
+// runtime SimLinkup blows up with a cast exception when Source and
+// Destination signal types disagree — this catches the misconfiguration
+// at editor authoring time so the user sees a red row before saving a
+// .mapping file that would crash the gauge.
+//
+// Drivers omitted from this map (currently `phcc`) are treated as
+// 'unknown' — channels span both kinds depending on the configured
+// peripheral, so we don't warn on them. A future per-channel-kind
+// extension can refine that without changing the call site.
+const DRIVER_CHANNEL_KIND = {
+  analogdevices:        'analog',  // DAC outputs
+  henksdi:              'analog',  // PWM channels + synchro position
+  henkquadsincos:       'analog',  // sin/cos resolver windings
+  niclasmorindts:       'analog',  // synchro
+  teensyrwr:            'analog',  // vector beam X/Y
+  teensyvectordrawing:  'analog',  // vector beam X/Y
+  arduinoseat:          'digital', // DX button bits
+  teensyewmu:           'digital', // DX button bits
+};
