@@ -61,6 +61,17 @@ function parseDriverConfigs(driverConfigs) {
   if (nmdts) {
     out.niclasmorindts = parseNiclasMorinDTSConfig(nmdts);
   }
+  const pokeys = driverConfigs?.['PoKeysHardwareSupportModule.config'];
+  if (pokeys) {
+    // Single parsed object shared by reference between both PoKeys
+    // driver ids. Editor mutations against either p.drivers.pokeys_digital
+    // or p.drivers.pokeys_pwm land in the same devices array, and only
+    // pokeys_digital's save path emits the file (pokeys_pwm carries
+    // skipConfigFile: true in DRIVER_META).
+    const parsed = parsePoKeysConfig(pokeys);
+    out.pokeys_digital = parsed;
+    out.pokeys_pwm = parsed;
+  }
   // No remaining drivers need passthrough handling — every driver in
   // DRIVER_META either has a structured parser above, or has no per-driver
   // config file at all. Earlier versions of this function had a passthrough
@@ -1004,6 +1015,110 @@ function backfillNiclasMorinDTSDevices(decl) {
         input:  typeof p?.input  === 'number' ? p.input  : 0,
         output: typeof p?.output === 'number' ? p.output : 0,
       }));
+    }
+    decl.devices[i] = dev;
+  }
+}
+
+// ── PoKeys parser / backfill ─────────────────────────────────────────────────
+//
+// Walk a PoKeysHardwareSupportModule.config XML string with DOMParser,
+// returning `{ devices: [{ address, name, pwmPeriodMicroseconds,
+// digitalOutputs: [{pin, invert}], pwmOutputs: [{channel}] }, ...] }`.
+//
+// The on-disk schema uses <Serial> per device; the editor's state
+// stores it as `address` (matching the address-shape convention used
+// by HenkSDI/NiclasMorinDTS) so the existing Mappings-tab driver-
+// channel picker plumbing reads it via the same code path.
+function parsePoKeysConfig(xmlText) {
+  const out = { devices: [] };
+  if (!xmlText) return out;
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  } catch {
+    return out;
+  }
+  if (doc.querySelector('parsererror')) return out;
+
+  const childByName = (parent, name) => {
+    if (!parent) return null;
+    const lname = name.toLowerCase();
+    for (const c of parent.children) {
+      if (c.tagName.toLowerCase() === lname) return c;
+    }
+    return null;
+  };
+  const textOf = (el) => el ? (el.textContent || '').trim() : '';
+  const intOr = (raw, dflt) => {
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : dflt;
+  };
+  const boolOr = (raw, dflt) => {
+    if (raw === 'true' || raw === 'True' || raw === '1') return true;
+    if (raw === 'false' || raw === 'False' || raw === '0') return false;
+    return dflt;
+  };
+
+  for (const deviceEl of doc.querySelectorAll('Devices > Device')) {
+    const dev = poKeysDefaultDevice();
+    const serial = textOf(childByName(deviceEl, 'Serial'));
+    if (serial) dev.address = serial;
+    const name = textOf(childByName(deviceEl, 'Name'));
+    if (name) dev.name = name;
+    const period = intOr(textOf(childByName(deviceEl, 'PWMPeriodMicroseconds')),
+                         POKEYS_DEVICE_DEFAULTS.pwmPeriodMicroseconds);
+    if (period > 0) dev.pwmPeriodMicroseconds = period;
+
+    const digOutsEl = childByName(deviceEl, 'DigitalOutputs');
+    if (digOutsEl) {
+      for (const outEl of digOutsEl.children) {
+        if (outEl.tagName !== 'Output') continue;
+        const pin = intOr(textOf(childByName(outEl, 'Pin')), 0);
+        if (pin < 1 || pin > 55) continue;
+        dev.digitalOutputs.push({
+          pin,
+          invert: boolOr(textOf(childByName(outEl, 'Invert')),
+                         POKEYS_DIGITAL_OUTPUT_DEFAULTS.invert),
+        });
+      }
+    }
+    const pwmOutsEl = childByName(deviceEl, 'PWMOutputs');
+    if (pwmOutsEl) {
+      for (const outEl of pwmOutsEl.children) {
+        if (outEl.tagName !== 'Output') continue;
+        const channel = intOr(textOf(childByName(outEl, 'Channel')), 0);
+        if (channel < 1 || channel > 6) continue;
+        dev.pwmOutputs.push({ channel });
+      }
+    }
+    out.devices.push(dev);
+  }
+  return out;
+}
+
+// Backfill any missing PoKeys fields on an already-loaded
+// p.drivers.pokeys_digital entry. Idempotent. Inflates older
+// `{ address }`-only records into the full schema.
+function backfillPoKeysDevices(decl) {
+  if (!decl || !Array.isArray(decl.devices)) return;
+  for (let i = 0; i < decl.devices.length; i++) {
+    const old = decl.devices[i] || {};
+    const dev = poKeysDefaultDevice();
+    if (typeof old.address === 'string' && old.address) dev.address = old.address;
+    if (typeof old.name === 'string') dev.name = old.name;
+    if (typeof old.pwmPeriodMicroseconds === 'number' && old.pwmPeriodMicroseconds > 0) {
+      dev.pwmPeriodMicroseconds = old.pwmPeriodMicroseconds;
+    }
+    if (Array.isArray(old.digitalOutputs)) {
+      dev.digitalOutputs = old.digitalOutputs
+        .filter(o => o && Number.isFinite(o.pin) && o.pin >= 1 && o.pin <= 55)
+        .map(o => ({ pin: o.pin, invert: o.invert !== false }));
+    }
+    if (Array.isArray(old.pwmOutputs)) {
+      dev.pwmOutputs = old.pwmOutputs
+        .filter(o => o && Number.isFinite(o.channel) && o.channel >= 1 && o.channel <= 6)
+        .map(o => ({ channel: o.channel }));
     }
     decl.devices[i] = dev;
   }

@@ -329,6 +329,7 @@ ipcMain.handle('load-profile', async (_, profileDir) => {
       'TeensyRWRHardwareSupportModule.config',
       'TeensyVectorDrawingHardwareSupportModule.config',
       'HenkieQuadSinCosHardwareSupportModule.config',
+      'PoKeysHardwareSupportModule.config',
     ];
     const driverConfigs = {};
     for (const cfg of driverConfigFilenames) {

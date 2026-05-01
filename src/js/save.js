@@ -61,6 +61,23 @@ function generateDriverConfigs(p) {
         content: renderNiclasMorinDTSConfig(decl),
         createOnly: false,
       };
+    } else if (driverId === 'pokeys_digital') {
+      // PoKeys is split across two driver ids in the editor catalog
+      // (`pokeys_digital` for digital pins, `pokeys_pwm` for PWM
+      // channels) so the kind-mismatch validator can key off a flat
+      // driver -> kind map. They share `decl` by reference (see
+      // parseDriverConfigs); only the digital id renders the file
+      // to avoid double-writing. `pokeys_pwm` carries
+      // skipConfigFile:true in DRIVER_META so it's never reached
+      // here as a writer. Without that contract, the second branch
+      // would overwrite the first with identical content — harmless
+      // but wasteful, and confusing in commit diffs.
+      out['PoKeysHardwareSupportModule.config'] = {
+        content: renderPoKeysConfig(decl),
+        createOnly: false,
+      };
+    } else if (driverId === 'pokeys_pwm') {
+      // Intentionally no-op. See pokeys_digital branch above.
     }
     // Other drivers: no auto-generation yet. The user adds them in the
     // Hardware tab → they appear in the registry, but the .config file (if
@@ -561,6 +578,68 @@ function renderNiclasMorinDTSConfig(decl) {
   }
   lines.push('  </Devices>');
   lines.push('</DTSCard>');
+  return lines.join('\n');
+}
+
+// Build the PoKeysHardwareSupportModule.config XML from
+// p.drivers.pokeys_digital (which shares its devices array by reference
+// with p.drivers.pokeys_pwm). Per-device element order matches the C#
+// class declaration order: Serial, Name, PWMPeriodMicroseconds,
+// DigitalOutputs, PWMOutputs. Root is <PoKeys>.
+//
+// Empty <DigitalOutputs/> and <PWMOutputs/> are emitted as self-closing
+// elements rather than being omitted, so the on-disk file is
+// self-documenting (a user opening it sees the schema even when they
+// haven't declared any pins or PWM channels yet).
+function renderPoKeysConfig(decl) {
+  const devices = (decl?.devices && decl.devices.length) ? decl.devices : [];
+  const lines = [
+    '<?xml version="1.0"?>',
+    '<PoKeys xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <Devices>',
+  ];
+  for (let d = 0; d < devices.length; d++) {
+    const dev = devices[d];
+    lines.push('    <Device>');
+    lines.push(`      <!-- PoKeys ${d + 1} (authored by SimLinkup Profile Editor — edit via Hardware Config tab) -->`);
+    // Serial is parsed back into `address` on load (matching the
+    // address-shape convention) but written as <Serial> here to match
+    // the C# PoKeysDeviceConfig.Serial property name.
+    lines.push(`      <Serial>${escXml(dev.address ?? '')}</Serial>`);
+    lines.push(`      <Name>${escXml(dev.name ?? '')}</Name>`);
+    lines.push(`      <PWMPeriodMicroseconds>${dev.pwmPeriodMicroseconds ?? POKEYS_DEVICE_DEFAULTS.pwmPeriodMicroseconds}</PWMPeriodMicroseconds>`);
+
+    const digOuts = Array.isArray(dev.digitalOutputs) ? dev.digitalOutputs : [];
+    if (digOuts.length === 0) {
+      lines.push('      <DigitalOutputs />');
+    } else {
+      lines.push('      <DigitalOutputs>');
+      for (const o of digOuts) {
+        lines.push('        <Output>');
+        lines.push(`          <Pin>${o.pin}</Pin>`);
+        lines.push(`          <Invert>${o.invert ? 'true' : 'false'}</Invert>`);
+        lines.push('        </Output>');
+      }
+      lines.push('      </DigitalOutputs>');
+    }
+
+    const pwmOuts = Array.isArray(dev.pwmOutputs) ? dev.pwmOutputs : [];
+    if (pwmOuts.length === 0) {
+      lines.push('      <PWMOutputs />');
+    } else {
+      lines.push('      <PWMOutputs>');
+      for (const o of pwmOuts) {
+        lines.push('        <Output>');
+        lines.push(`          <Channel>${o.channel}</Channel>`);
+        lines.push('        </Output>');
+      }
+      lines.push('      </PWMOutputs>');
+    }
+
+    lines.push('    </Device>');
+  }
+  lines.push('  </Devices>');
+  lines.push('</PoKeys>');
   return lines.join('\n');
 }
 

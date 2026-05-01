@@ -690,6 +690,54 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
   color: var(--text);
 }
 
+/* PoKeys per-output row: pin/channel selector + ancillary controls + delete.
+   Compact horizontal layout that hugs the left edge of the section so the
+   list reads like a compact table rather than a series of cards. */
+.hwconfig-pokeys-row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin: 4px 0;
+}
+.hwconfig-pokeys-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+.hwconfig-pokeys-row select,
+.hwconfig-pokeys-row input[type="text"],
+.hwconfig-pokeys-row input[type="number"] {
+  font-size: 12px;
+  padding: 4px 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+}
+/* "Invert" checkbox label sits inline with the select; no uppercase
+   styling since it's a sentence rather than a column header. */
+.hwconfig-pokeys-row .hwconfig-pokeys-invert {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  color: var(--text);
+  font-weight: normal;
+  padding-bottom: 4px;
+}
+.hwconfig-empty-row {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: 4px 0;
+}
+
 /* Per-channel grid: 5 columns. Index column is narrow + monospace; the four
    value columns are equal-width number inputs. */
 .hwconfig-channel-table {

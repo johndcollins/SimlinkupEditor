@@ -327,3 +327,32 @@ const HENKQSC_DEVICE_DEFAULTS = Object.freeze({
 function henkQuadSinCosDefaultDevice() {
   return { ...HENKQSC_DEVICE_DEFAULTS };
 }
+
+// ── PoKeys defaults ──────────────────────────────────────────────────────────
+//
+// Multi-device address-shape driver. The "address" stores the PoKeys
+// serial number as a string (matches HenkSDI/NiclasMorinDTS plumbing).
+// Each device tracks declared digital pins and PWM channels separately;
+// `digitalOutputs` and `pwmOutputs` start empty so a fresh PoKeys
+// declaration writes an empty file (the user opens Hardware Config to
+// add pins). PWMPeriodMicroseconds defaults to 20000 (20 ms — typical
+// RC-servo period and reasonable for LED dimming). Per-pin invert
+// defaults to true so SimLinkup's state=true means pin-sources-3.3V,
+// counteracting the hardware's documented "uninverted output: 0=3.3V,
+// 1=0V" behaviour.
+const POKEYS_DEVICE_DEFAULTS = Object.freeze({
+  address: '',
+  name: '',
+  pwmPeriodMicroseconds: 20000,
+});
+const POKEYS_DIGITAL_OUTPUT_DEFAULTS = Object.freeze({ pin: 1, invert: true });
+const POKEYS_PWM_OUTPUT_DEFAULTS = Object.freeze({ channel: 1 });
+function poKeysDefaultDevice() {
+  return {
+    ...POKEYS_DEVICE_DEFAULTS,
+    digitalOutputs: [],
+    pwmOutputs: [],
+  };
+}
+function poKeysDefaultDigitalOutput() { return { ...POKEYS_DIGITAL_OUTPUT_DEFAULTS }; }
+function poKeysDefaultPWMOutput()     { return { ...POKEYS_PWM_OUTPUT_DEFAULTS }; }

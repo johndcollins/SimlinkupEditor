@@ -606,6 +606,7 @@ function parseGaugeConfigs(driverConfigs) {
     if (filename === 'TeensyEWMUHardwareSupportModule.config') continue;
     if (filename === 'TeensyRWRHardwareSupportModule.config') continue;
     if (filename === 'TeensyVectorDrawingHardwareSupportModule.config') continue;
+    if (filename === 'PoKeysHardwareSupportModule.config') continue;
     // Only files that match a catalog PN we know how to calibrate get parsed
     // into structured state. Everything else round-trips as raw text.
     const pn = gaugePnForConfigFilename(filename);

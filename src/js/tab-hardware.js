@@ -84,6 +84,17 @@ function renderHardwareCard(driverId, channelsWired) {
   return card;
 }
 
+// PoKeys is split across two driver ids (`pokeys_digital` and
+// `pokeys_pwm`) for kind-mismatch validator purposes, but represents
+// ONE physical class of board with ONE config file. The two declarations
+// share a single `devices` array by reference: adding a PoKeys to either
+// id reuses the other's array so the user sees a single coherent device
+// list, edits land in one place, and the save flow emits the file once.
+const POKEYS_DRIVER_PARTNER = {
+  pokeys_digital: 'pokeys_pwm',
+  pokeys_pwm: 'pokeys_digital',
+};
+
 function toggleDriver(driverId) {
   const p = profiles[activeIdx];
   if (p.drivers[driverId]) {
@@ -94,7 +105,16 @@ function toggleDriver(driverId) {
     }
     delete p.drivers[driverId];
   } else {
-    p.drivers[driverId] = { devices: [DRIVER_META[driverId].defaultDevice()] };
+    // PoKeys partner-share: if the partner id is already declared, link
+    // both decls to the SAME devices array so adding a board to either
+    // shows up in both. Without this, the user could declare both ids
+    // and end up with two unrelated device lists.
+    const partner = POKEYS_DRIVER_PARTNER[driverId];
+    if (partner && p.drivers[partner]) {
+      p.drivers[driverId] = { devices: p.drivers[partner].devices };
+    } else {
+      p.drivers[driverId] = { devices: [DRIVER_META[driverId].defaultDevice()] };
+    }
   }
   renderEditor();
 }
