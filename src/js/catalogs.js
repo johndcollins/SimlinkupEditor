@@ -304,13 +304,24 @@ const DRIVER_HINTS = {
 // peripheral, so we don't warn on them.
 const DRIVER_CHANNEL_KIND = {
   analogdevices:        'analog',  // DAC outputs
-  henksdi:              'analog',  // PWM channels + synchro position
   henkquadsincos:       'analog',  // sin/cos resolver windings
   niclasmorindts:       'analog',  // synchro
   teensyrwr:            'analog',  // vector beam X/Y
   teensyvectordrawing:  'analog',  // vector beam X/Y
   arduinoseat:          'digital', // DX button bits
   teensyewmu:           'digital', // DX button bits
+  // HenkSDI's DIG_PWM_1..7 channels are dual-purpose — each can be
+  // configured per-device (in the legacy HenkSDIHardwareSupportModule
+  // .config OutputChannelsConfig.DIG_PWM_N.Mode field) as either
+  // Digital or PWM. The editor doesn't know which mode the user has
+  // configured at validate time, so we return null for those channels
+  // ("kind unknown — don't warn"). Only PWM_OUT is hardcoded as PWM-
+  // only by the firmware. All other channels (synchro position drives,
+  // etc.) should be treated as analog.
+  henksdi: (channel) => {
+    if (typeof channel === 'string' && /^DIG_PWM_[1-7]$/.test(channel)) return null;
+    return 'analog';
+  },
   // PoKeys mixes kinds: digital pins + PoExtBus relay bits = digital;
   // PWM channels = analog. Dispatch on the channel string format.
   pokeys: (channel) => {
