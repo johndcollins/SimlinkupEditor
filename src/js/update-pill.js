@@ -56,9 +56,19 @@
       actionBtn.style.display = '';
       actionBtn.textContent = 'Restart and install';
       actionBtn.onclick = () => {
-        // Confirm so a mid-edit click doesn't kill in-progress work.
-        const ok = confirm('Restart the editor now to install the update?\n\nUnsaved profile changes will be lost.');
-        if (ok) window.api.update.install();
+        // requestSafeClose checks for unsaved profile edits and shows
+        // the same Save / Discard / Cancel modal used by window-close.
+        // When the profile is clean it short-circuits straight to
+        // window.api.update.install().
+        if (typeof requestSafeClose === 'function') {
+          requestSafeClose('install');
+        } else {
+          // Belt-and-suspenders fallback if close-confirm.js failed
+          // to load — preserve the original prompt-and-install flow
+          // so the install path is never silently broken.
+          const ok = confirm('Restart the editor now to install the update?\n\nUnsaved profile changes will be lost.');
+          if (ok) window.api.update.install();
+        }
       };
     } else if (state === 'error') {
       actionBtn.style.display = '';

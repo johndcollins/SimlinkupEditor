@@ -80,6 +80,10 @@ async function openFolder() {
 
 async function selectProfile(i) {
   activeIdx = i;
+  // Picking a profile = user is editing — collapse the sidebar so the
+  // editor pane gets the full window width. The user can re-show it
+  // any time via the › button in editor-head.
+  if (typeof setSidebarCollapsed === 'function') setSidebarCollapsed(true);
   const p = profiles[i];
   // Per-gauge dirty flags are scoped to the active profile — switching
   // profiles wipes them so the new profile's Save buttons start
@@ -87,6 +91,7 @@ async function selectProfile(i) {
   // profile (those should have already been auto-saved or saved
   // manually before the switch).
   if (typeof _gaugeDirty !== 'undefined') _gaugeDirty.clear();
+  clearChainDirty();
   // PoKeys test state ("relay X is currently latched ON for testing")
   // is profile-scoped and cleared on switch. The hardware itself
   // keeps the last value we wrote until something else (us, the
@@ -168,6 +173,8 @@ async function deleteProfile() {
   }
   profiles.splice(activeIdx, 1);
   activeIdx = null;
+  // No active profile → re-show the sidebar so the user can pick one.
+  if (typeof setSidebarCollapsed === 'function') setSidebarCollapsed(false);
   document.getElementById('btnSave').disabled = true;
   document.getElementById('btnDelete').disabled = true;
   document.getElementById('editorTitle').textContent = 'Select a profile';
@@ -230,6 +237,7 @@ async function saveProfile() {
     // Full-profile save writes every gauge config too — clear the
     // per-gauge dirty flags so the Calibration tab Save buttons disable.
     if (typeof _gaugeDirty !== 'undefined') _gaugeDirty.clear();
+    clearChainDirty();
     toast('Profile saved to ' + result.path);
     document.getElementById('saveStatus').textContent = 'Saved ✓';
     document.getElementById('saveStatus').className = 'status-msg status-ok';

@@ -36,6 +36,7 @@ function renderSimSupportCard(ss) {
 
 function toggleSimSupport(id) {
   const p = profiles[activeIdx];
+  markChainDirty();
   if (!p.simSupports) p.simSupports = [];
   const idx = p.simSupports.indexOf(id);
   if (idx >= 0) {

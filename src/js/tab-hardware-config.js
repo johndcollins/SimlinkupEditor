@@ -8,9 +8,29 @@
 // Renders into #pane-hardwareconfig. Re-runs on every renderEditor() call,
 // which keeps it in sync with the Hardware tab when the user adds/removes
 // a driver.
+// One-time delegated listener: any form-control change inside the
+// Hardware Config pane marks the profile dirty. This catches all 50+
+// per-driver field mutators (setSdiField, setArdSeatOutputField, etc.)
+// without instrumenting each one individually. The listener is attached
+// once via `dataset.dirtyWired` because renderHardwareConfig() runs on
+// every renderEditor() call — re-attaching would stack handlers.
+function _wireHwConfigDirtyListener(pane) {
+  if (pane.dataset.dirtyWired === '1') return;
+  pane.dataset.dirtyWired = '1';
+  // 'input' fires per-keystroke for text/number inputs; 'change' fires on
+  // commit for selects and checkboxes. Both are covered so any mutation
+  // marks dirty regardless of control type. The handler is intentionally
+  // unconditional — toggling card open/close doesn't fire input/change,
+  // so we don't risk false positives there.
+  const onMutation = () => { if (typeof markChainDirty === 'function') markChainDirty(); };
+  pane.addEventListener('input', onMutation, { capture: true });
+  pane.addEventListener('change', onMutation, { capture: true });
+}
+
 function renderHardwareConfig() {
   const pane = document.getElementById('pane-hardwareconfig');
   if (!pane) return;
+  _wireHwConfigDirtyListener(pane);
   const p = profiles[activeIdx];
   const declaredIds = Object.keys(p.drivers || {}).sort((a, b) =>
     DRIVER_META[a].label.localeCompare(DRIVER_META[b].label));

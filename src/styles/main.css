@@ -127,6 +127,52 @@ textarea { resize: vertical; width: 100%; font-family: var(--font-mono); font-si
   flex: 1;
   overflow: hidden;
 }
+/* Collapsed-sidebar state — toggled by the chevron button in
+   sidebar-head and the matching show button in editor-head. The
+   sidebar's column collapses to 0 and the pane gets visibility:hidden
+   so the editor visibly takes the full width.
+   We deliberately use visibility (not display:none) because
+   display:none removes the sidebar from grid auto-flow and the
+   editor (second child) would shift into column 1 — which is now 0
+   wide — making the whole editor disappear. visibility keeps the
+   sidebar in flow but clips it to nothing. */
+.main-layout > .sidebar { grid-column: 1 / 2; }
+.main-layout > .editor  { grid-column: 2 / 3; }
+.main-layout.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+.main-layout.sidebar-collapsed .sidebar {
+  visibility: hidden;
+  overflow: hidden;
+}
+.main-layout:not(.sidebar-collapsed) .sidebar-show-btn { display: none; }
+
+/* Compact toggle buttons. The collapse button sits inside
+   sidebar-head; the show button sits at the front of editor-head
+   and only paints when the sidebar is collapsed. */
+.sidebar-collapse-btn,
+.sidebar-show-btn {
+  appearance: none;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  color: var(--text-secondary);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+.sidebar-collapse-btn:hover,
+.sidebar-show-btn:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text);
+}
 
 /* ── Sidebar ── */
 .sidebar {
@@ -1991,7 +2037,8 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
    accepted the safety disclaimer. Refusing closes the app; accepting
    persists the acceptance to settings.json so this is one-time per
    machine/user. */
-#disclaimerOverlay {
+#disclaimerOverlay,
+#unsavedOverlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);

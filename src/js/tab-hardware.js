@@ -101,6 +101,7 @@ function toggleDriver(driverId) {
   } else {
     p.drivers[driverId] = { devices: [DRIVER_META[driverId].defaultDevice()] };
   }
+  markChainDirty();
   renderEditor();
 }
 
@@ -109,6 +110,7 @@ function addDriverDevice(driverId) {
   const decl = p.drivers[driverId];
   if (!decl) return;
   decl.devices.push(DRIVER_META[driverId].defaultDevice());
+  markChainDirty();
   renderEditor();
 }
 
@@ -137,6 +139,7 @@ function removeDriverDevice(driverId, idx) {
     return;
   }
   decl.devices.splice(idx, 1);
+  markChainDirty();
   renderEditor();
 }
 
@@ -156,4 +159,5 @@ function setDriverDeviceAddress(driverId, idx, address) {
     }
   }
   decl.devices[idx].address = address.trim();
+  markChainDirty();
 }

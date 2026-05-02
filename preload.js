@@ -53,4 +53,18 @@ contextBridge.exposeInMainWorld('api', {
       return () => ipcRenderer.removeListener('update:status', listener);
     },
   },
+  // ── Close / quit confirmation ──────────────────────────────────────────
+  // Window close (X button), Alt+F4, OS shutdown, and the auto-update
+  // "Restart and install" path all funnel through the same renderer
+  // dirty-check. Main intercepts the close event, calls the renderer
+  // listener via 'app:close-requested', and waits for the renderer to
+  // call back with confirmClose('quit') or confirmClose('cancel').
+  close: {
+    onCloseRequested: (cb) => {
+      const listener = () => cb();
+      ipcRenderer.on('app:close-requested', listener);
+      return () => ipcRenderer.removeListener('app:close-requested', listener);
+    },
+    confirm: (action) => ipcRenderer.invoke('app:confirm-close', { action }),
+  },
 });

@@ -23,6 +23,15 @@
 function renderDirect() {
   const pane = document.getElementById('pane-direct');
   if (!pane) return;
+  // Same pattern as Hardware Config tab — one delegated listener per
+  // pane catches every mutator without instrumenting each addDirectGroup
+  // / setDirectInputSource / setDirectGroupSim entry point individually.
+  if (pane.dataset.dirtyWired !== '1') {
+    pane.dataset.dirtyWired = '1';
+    const onMutation = () => { if (typeof markChainDirty === 'function') markChainDirty(); };
+    pane.addEventListener('input', onMutation, { capture: true });
+    pane.addEventListener('change', onMutation, { capture: true });
+  }
   const p = profiles[activeIdx];
   if (!p) return;
 
@@ -307,6 +316,7 @@ function addDirectGroup() {
   // Auto-open the new card so the user lands on it ready to type a
   // name. Persist via _directOpen so the next re-render keeps it open.
   _directOpen.add(`${p.name}|${id}`);
+  markChainDirty();
   renderEditor();
 }
 
@@ -332,6 +342,7 @@ function removeDirectGroup(groupIdx) {
     !(e.stage === 'direct' && e.directGroupId === group.id)
   );
   p.directGroups.splice(groupIdx, 1);
+  markChainDirty();
   renderEditor();
 }
 
@@ -371,6 +382,7 @@ function addDirectInput(groupIdx) {
   // dropdown, which sets both the input's sourceSignalId AND the
   // matching chain edge's src in one step.
   group.inputs.push({ id: _newDirectId(), sourceSignalId: '' });
+  markChainDirty();
   renderEditor();
 }
 
@@ -397,6 +409,7 @@ function removeDirectInput(groupIdx, inputIdx) {
     !(e.stage === 'direct' && e.directGroupId === group.id && e.directInputId === input.id)
   );
   group.inputs.splice(inputIdx, 1);
+  markChainDirty();
   renderEditor();
 }
 

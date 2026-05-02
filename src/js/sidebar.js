@@ -3,6 +3,29 @@
 // per-tab pane shells. switchTab is the click handler wired into the inline
 // onclick= attributes of the tab buttons.
 
+// ── Sidebar collapse ─────────────────────────────────────────────────────────
+// Auto-rule: sidebar is hidden when a profile is selected (the user is
+// editing — the editor pane should get the full width) and shown when
+// no profile is selected (the user is picking one). selectProfile and
+// the deselect paths call setSidebarCollapsed() to apply the rule.
+//
+// Manual toggle is also available via the chevron button in
+// sidebar-head and the › button in editor-head. A manual toggle is a
+// transient peek — the rule re-asserts the next time the active-
+// profile state changes (selecting a different profile collapses
+// again; deleting the active profile shows again). Not persisted —
+// the rule is purely a function of activeIdx.
+function setSidebarCollapsed(collapsed) {
+  const layout = document.getElementById('mainLayout');
+  if (!layout) return;
+  layout.classList.toggle('sidebar-collapsed', !!collapsed);
+}
+function toggleSidebar() {
+  const layout = document.getElementById('mainLayout');
+  if (!layout) return;
+  layout.classList.toggle('sidebar-collapsed');
+}
+
 // ── Profile list ─────────────────────────────────────────────────────────────
 function renderSidebar() {
   const list = document.getElementById('profileList');

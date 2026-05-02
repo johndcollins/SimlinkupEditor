@@ -43,3 +43,33 @@ let instMfrFilter = 'all';
 let mapSearch = '';
 let mapStatusFilter = 'all';
 let mapTypeFilter = 'all';
+
+// Chain-dirty tracker. True when the active profile has unsaved
+// non-calibration edits (signal mappings, declared instruments,
+// declared drivers, hardware config, declared sim-support, direct
+// groups). Calibration dirtiness is tracked separately via
+// _gaugeDirty in tab-calibration.js — isProfileDirty() unions both.
+//
+// Cleared when:
+//   - the user saves the profile (saveProfile)
+//   - the user switches to a different profile (selectProfile)
+//   - a profile is loaded from disk (applyLoadedChain)
+//
+// Used by:
+//   - the close-confirmation flow (main.js sends 'app:check-dirty'
+//     before before-quit; the renderer answers with isProfileDirty())
+//   - the auto-update install-now button (skips the prompt when clean)
+let _chainDirty = false;
+function markChainDirty() { _chainDirty = true; }
+function clearChainDirty() { _chainDirty = false; }
+function isChainDirty() { return _chainDirty; }
+
+// Union of chain-dirty + any-gauge-dirty. Returns true when the active
+// profile has ANY unsaved state. Defensive against tab-calibration.js
+// not yet being loaded (init order should make this moot, but the
+// check costs nothing).
+function isProfileDirty() {
+  if (_chainDirty) return true;
+  if (typeof _gaugeDirty !== 'undefined' && _gaugeDirty.size > 0) return true;
+  return false;
+}

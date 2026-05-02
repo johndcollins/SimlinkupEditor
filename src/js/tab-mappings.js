@@ -156,6 +156,7 @@ function simSourceOptionsHtml(declaredSimIds) {
 
 function onSetSourceForInputPort(pn, port, kind, value) {
   const p = profiles[activeIdx];
+  markChainDirty();
   const edge = ensureStageOneEdge(p, pn, port, kind);
   edge.src = value;
   if (!edge.src && !edge.dst) p.chain.edges = p.chain.edges.filter(e => e !== edge);
@@ -171,6 +172,7 @@ function onSetSourceForInputPort(pn, port, kind, value) {
 
 function onSetDriverForOutputPort(pn, port, kind, driver) {
   const p = profiles[activeIdx];
+  markChainDirty();
   // If the user is picking a driver, they DO want this port wired —
   // clear any "intentionally skipped" flag so the row stops being
   // greyed out and the dropdowns enable. Persist in the background;
@@ -197,6 +199,7 @@ function onSetDriverForOutputPort(pn, port, kind, driver) {
 
 function onSetChannelForOutputPort(pn, port, field, value) {
   const p = profiles[activeIdx];
+  markChainDirty();
   const edge = p.chain.edges.find(e =>
     e.stage === 2 && e.srcGaugePn === pn && e.srcGaugePort === port
   );

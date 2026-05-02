@@ -47,12 +47,15 @@
   <button class="btn-primary" onclick="pickDir()">Pick a different folder…</button>
 </div>
 
-<div class="main-layout">
+<div class="main-layout" id="mainLayout">
   <!-- Sidebar -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebarPane">
     <div class="sidebar-head">
       <span class="sidebar-title">Profiles</span>
-      <span id="profileCount" style="font-size:10px;color:var(--text-secondary)">0</span>
+      <span style="display:flex;align-items:center;gap:8px">
+        <span id="profileCount" style="font-size:10px;color:var(--text-secondary)">0</span>
+        <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Hide profile list" aria-label="Hide profile list">‹</button>
+      </span>
     </div>
     <div class="profile-list" id="profileList">
       <div class="empty">No profiles loaded</div>
@@ -66,12 +69,15 @@
   <!-- Editor -->
   <div class="editor">
     <div class="editor-head">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div class="editor-title" id="editorTitle">Select a profile</div>
-          <span id="editorDefaultBadge" class="default-badge" style="display:none">default</span>
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <button class="sidebar-show-btn" onclick="toggleSidebar()" title="Show profile list" aria-label="Show profile list">›</button>
+        <div style="min-width:0">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="editor-title" id="editorTitle">Select a profile</div>
+            <span id="editorDefaultBadge" class="default-badge" style="display:none">default</span>
+          </div>
+          <div class="editor-meta" id="editorMeta">Create a new profile or select one from the list</div>
         </div>
-        <div class="editor-meta" id="editorMeta">Create a new profile or select one from the list</div>
       </div>
       <div class="editor-actions">
         <span class="status-msg" id="saveStatus"></span>
@@ -136,6 +142,26 @@
     <div class="disclaimer-actions">
       <button class="btn-danger" onclick="declineDisclaimer()">Decline and exit</button>
       <button class="btn-primary" id="disclaimerAcceptBtn" onclick="acceptDisclaimer()" disabled>I understand and accept</button>
+    </div>
+  </div>
+</div>
+
+<!--
+  Unsaved-changes confirmation. Shown when the user closes the window
+  (X / Alt+F4 / OS shutdown) or clicks the auto-update "Restart and
+  install" button while the active profile has unsaved edits. Reuses
+  the disclaimer overlay's CSS.
+-->
+<div id="unsavedOverlay" style="display:none">
+  <div class="disclaimer-card">
+    <div class="disclaimer-title">Unsaved changes</div>
+    <div class="disclaimer-body" id="unsavedMessage">
+      <p>The active profile has unsaved changes. What would you like to do?</p>
+    </div>
+    <div class="disclaimer-actions" style="gap:8px;flex-wrap:wrap">
+      <button class="btn-secondary" onclick="onUnsavedCancel()">Cancel</button>
+      <button class="btn-danger" onclick="onUnsavedDiscard()">Discard and continue</button>
+      <button class="btn-primary" onclick="onUnsavedSave()">Save and continue</button>
     </div>
   </div>
 </div>
@@ -229,6 +255,7 @@
 <script src="js/tab-simsupport.js"></script>
 <script src="js/tab-calibration.js"></script>
 <script src="js/profile.js"></script>
+<script src="js/close-confirm.js"></script>
 <script src="js/init.js"></script>
 <script src="js/update-pill.js"></script>
 </body>

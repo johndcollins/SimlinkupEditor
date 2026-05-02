@@ -109,6 +109,7 @@ function setAllMfrGroupsOpen(open) {
 
 function toggleInstrument(pn) {
   const p = profiles[activeIdx];
+  markChainDirty();
   const idx = p.instruments.indexOf(pn);
   if (idx === -1) {
     p.instruments.push(pn);

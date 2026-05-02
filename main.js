@@ -50,6 +50,30 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Intercept the window close (X button, Alt+F4, OS shutdown, etc.)
+  // and ask the renderer whether the active profile has unsaved
+  // changes. The renderer answers via the 'app:confirm-close' IPC
+  // (handler below) with 'quit' to actually close or 'cancel' to
+  // veto. _allowClose is set when the renderer confirms so the second
+  // close event (after we call mainWindow.close() ourselves) goes
+  // through unmolested.
+  let _allowClose = false;
+  mainWindow.on('close', (e) => {
+    if (_allowClose) return;
+    e.preventDefault();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('app:close-requested');
+    }
+  });
+  ipcMain.handle('app:confirm-close', (_event, { action }) => {
+    if (action === 'quit') {
+      _allowClose = true;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+    }
+    // 'cancel' → do nothing; the prevented-default close stays in effect.
+    return { ok: true };
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
