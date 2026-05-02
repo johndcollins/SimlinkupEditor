@@ -1385,6 +1385,9 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
       </div>
       <div class="calibration-bp-actions">
         <button class="cal-btn cal-btn-accent" onclick="addCalibrationBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}')">+ Add breakpoint</button>
+        <button class="cal-btn"
+                onclick="sortCalibrationBreakpoints('${escHtml(pn)}','${escHtml(tplCh.id)}')"
+                title="Reorder rows by input value, ascending. Useful after inserting a breakpoint that belongs in the middle of the curve.">Sort by input ↑</button>
       </div>
       ${meta.unit === 'volts'
         ? `<div class="calibration-trim-grid">
@@ -1862,6 +1865,9 @@ function renderPiecewiseResolverPairEditor(pn, channelIdx, tplCh, liveCh, partne
         <div class="calibration-bp-actions" style="margin-bottom:8px">
           <button class="cal-btn cal-btn-accent"
                   onclick="addPiecewiseResolverBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}')">+ Add breakpoint</button>
+          <button class="cal-btn"
+                  onclick="sortCalibrationBreakpoints('${escHtml(pn)}','${escHtml(tplCh.id)}')"
+                  title="Reorder rows by input value, ascending. Useful after inserting a breakpoint that belongs in the middle of the curve.">Sort by input ↑</button>
         </div>
         <div class="calibration-piecewise-table">
           <div class="calibration-piecewise-row calibration-piecewise-header">
@@ -2312,6 +2318,27 @@ function addCalibrationBreakpoint(pn, channelId) {
   autoSaveImmediate(pn);
 }
 
+// Sort a channel's breakpoints by input value, ascending. Used by both the
+// standalone piecewise table and the resolver-pair piecewise table — both
+// store breakpoints under `ch.breakpoints` with an `input` field. Output side
+// (`volts`/`output`/`angle`) tags along on each row, so sorting is purely
+// stable-by-input. Triggered by the table-level "Sort by input" button so
+// users can rearrange after adding breakpoints out of order, without the
+// disruption of an auto-sort-on-edit.
+function sortCalibrationBreakpoints(pn, channelId) {
+  const p = profiles[activeIdx];
+  const entry = ensureGaugeEntry(p, pn);
+  if (!entry) return;
+  const ch = entry.channels.find(c => c.id === channelId);
+  if (!ch || !Array.isArray(ch.breakpoints) || ch.breakpoints.length < 2) return;
+  // Stable ascending sort by input. Number() coerces — strings like "100"
+  // happen if a user pasted from a spreadsheet; we want them sorted
+  // numerically, not lexicographically.
+  ch.breakpoints.sort((a, b) => (Number(a.input) || 0) - (Number(b.input) || 0));
+  renderCalibration();
+  autoSaveImmediate(pn);
+}
+
 // 10-0285 altimeter only: drop the four legacy bare baro fields from the
 // per-gauge config. Newer SimLinkup builds use BMS's already-baro-compensated
 // altitude directly and ignore these fields when <Channels> is populated, so
@@ -2366,10 +2393,28 @@ function setCalibrationTrim(pn, channelId, field, value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return;
   ch[field] = n;
-  // Trim affects the header pill — re-render to refresh the edited/default
-  // state. The full re-render also re-positions the slider thumb, so the
-  // slider stays in sync with whatever the user typed.
-  renderCalibration();
+  // Update the sibling slider in place so the thumb tracks the typed value
+  // without a full tab re-render. Re-rendering on every spinner-button click
+  // tore down the input under the user's mouse mid-click, which left the
+  // browser's spin-button state machine in a stuck "auto-repeat" mode —
+  // surfaced as the up-arrow appearing to decrement after the first click
+  // until the user moved the mouse to clear hover state. The header pill
+  // (edited/default) goes briefly stale until the next event that does
+  // re-render (add/remove breakpoint, switch tab, save) — same staleness
+  // contract as setCalibrationBreakpoint above.
+  const which = field === 'zeroTrim' ? 'zero' : 'gain';
+  const slider = document.getElementById(`cal-trim-${pn}-${channelId}-${which}-slider`);
+  if (slider) {
+    // Slider range is bounded; clamp the typed value in case the user
+    // entered something outside the slider's useful range.
+    const sMin = Number(slider.min);
+    const sMax = Number(slider.max);
+    if (Number.isFinite(sMin) && Number.isFinite(sMax)) {
+      slider.value = String(Math.max(sMin, Math.min(sMax, n)));
+    } else {
+      slider.value = String(n);
+    }
+  }
   autoSaveImmediate(pn);
 }
 
@@ -2577,16 +2622,35 @@ function setCalibrationResolverField(pn, channelIdx, sinChannelId, field, value)
   if (!entry) return;
   const ch = entry.channels.find(c => c.id === sinChannelId);
   if (!ch) return;
+  let isPureNumeric = false;
   if (numericFields.indexOf(field) >= 0) {
     const n = Number(value);
     if (!Number.isFinite(n)) return;
     ch[field] = n;
+    isPureNumeric = true;
   } else if (stringFields.indexOf(field) >= 0) {
     if (value !== 'clamp' && value !== 'zero') return;
     ch[field] = value;
   } else if (boolFields.indexOf(field) >= 0) {
     ch[field] = !!value;
   } else {
+    return;
+  }
+  // Pure numeric edits don't change visible structure — sync the sibling
+  // slider in place instead of re-rendering the whole tab. Re-rendering on
+  // every spinner-button click was tearing the input out from under the
+  // user's mouse mid-click, leaving Chromium's spin-button auto-repeat in
+  // a stuck "downward" state until the next mousemove. Bool/string edits
+  // (caged rest enable, below-min behavior) DO change visible structure
+  // and still need the full re-render.
+  if (isPureNumeric) {
+    if (field === 'peakVolts') {
+      const slider = document.getElementById(`cal-peakvolts-${pn}-${sinChannelId}-slider`);
+      if (slider) {
+        slider.value = String(Math.max(0, Math.min(10, ch[field])));
+      }
+    }
+    autoSaveImmediate(pn);
     return;
   }
   renderCalibration();
