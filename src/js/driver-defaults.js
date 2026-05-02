@@ -344,15 +344,42 @@ const POKEYS_DEVICE_DEFAULTS = Object.freeze({
   address: '',
   name: '',
   pwmPeriodMicroseconds: 20000,
+  // ConnectPerWrite — opt-in. When true, the HSM connects to the
+  // device for each signal change instead of holding a persistent
+  // handle, letting the PoKeys vendor tool / a parallel SimLinkup
+  // test / the editor's per-row test buttons share the board. Costs
+  // ~30-80ms per write so it's NOT recommended for PWM-heavy boards.
+  // Default false preserves the existing high-performance model.
+  connectPerWrite: false,
 });
-const POKEYS_DIGITAL_OUTPUT_DEFAULTS = Object.freeze({ pin: 1, invert: true });
-const POKEYS_PWM_OUTPUT_DEFAULTS = Object.freeze({ channel: 1 });
+// `name` is editor-only metadata surfaced in the Mappings dropdown.
+// Empty by default — users add a name when they want a more readable
+// label than "DIGITAL_PIN[5]" / "PWM[3]" / "PoExtBus[1]".
+const POKEYS_DIGITAL_OUTPUT_DEFAULTS = Object.freeze({ pin: 1, name: '', invert: true });
+const POKEYS_PWM_OUTPUT_DEFAULTS = Object.freeze({ channel: 1, name: '' });
+// PoExtBus = daisy-chained 8-bit shift registers. Up to 10 devices in
+// the chain × 8 bits per device = 80 selectable bits. Stored flat
+// (1..80) to match the on-disk schema and keep the HSM cache math
+// simple; the editor UI surfaces both forms (Device N : Letter A..H
+// + flat bit number) for orientation against the PoKeys vendor tool.
+//
+// invert defaults to FALSE for PoExtBus — opposite of GPIO digital
+// pins. PoExtBus drives shift-register outputs that go to relay coils
+// directly: bit=1 means coil energised, bit=0 means coil de-energised.
+// At startup the cache is all zeros (relays OFF), and a sim signal
+// transitioning to state=true should turn the relay ON, which means
+// no inversion. (GPIO pins default to invert=true because their
+// "uninverted output" is documented as 0→3.3V which is the opposite
+// of intuitive — that quirk doesn't apply to the shift-register chain.)
+const POKEYS_POEXTBUS_OUTPUT_DEFAULTS = Object.freeze({ bit: 1, name: '', invert: false });
 function poKeysDefaultDevice() {
   return {
     ...POKEYS_DEVICE_DEFAULTS,
     digitalOutputs: [],
     pwmOutputs: [],
+    extBusOutputs: [],
   };
 }
 function poKeysDefaultDigitalOutput() { return { ...POKEYS_DIGITAL_OUTPUT_DEFAULTS }; }
 function poKeysDefaultPWMOutput()     { return { ...POKEYS_PWM_OUTPUT_DEFAULTS }; }
+function poKeysDefaultPoExtBusOutput() { return { ...POKEYS_POEXTBUS_OUTPUT_DEFAULTS }; }

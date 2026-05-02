@@ -1,8 +1,10 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using PoKeysDevice_DLL;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace SimLinkupCalibrationBridge
 {
@@ -39,8 +41,33 @@ namespace SimLinkupCalibrationBridge
     //   ─→ { "id": "5", "cmd": "endSession", "sim": "falcon4" }
     //   ←─ { "id": "5", "ok": true }
     //
-    //   ─→ { "id": "6", "cmd": "shutdown" }
-    //   ←─ { "id": "6", "ok": true }   (then exit 0)
+    // PoKeys USB + Ethernet device enumeration (stateless — no sim, no
+    // session). Network discovery has a 2 s timeout so the call
+    // doesn't hang on networks with no PoKeys devices listening but
+    // still has time to find boards across subnets.
+    //
+    //   ─→ { "id": "6", "cmd": "pokeys.enumerate" }
+    //   ←─ { "id": "6", "ok": true,
+    //         "devices": [
+    //           { "serial": 52153, "userId": 0, "name": "PoKeys57U",
+    //             "hwName": "57U", "firmware": "4.7.15",
+    //             "connection": "usb" },
+    //           { "serial": 12345, "userId": 1, "name": "Cockpit",
+    //             "hwName": "57E", "firmware": "4.7.15",
+    //             "connection": "network" },
+    //           ...
+    //         ] }
+    //
+    // SimLinkup process-running check via a kernel mutex SimLinkup
+    // creates at startup (Local\\SimLinkupRunning). Returns instantly
+    // (microseconds) — replaces the previous tasklist shellout which
+    // was taking ~3 s on machines with AV process-enumeration hooks.
+    //
+    //   ─→ { "id": "7", "cmd": "system.isSimLinkupRunning" }
+    //   ←─ { "id": "7", "ok": true, "running": false }
+    //
+    //   ─→ { "id": "8", "cmd": "shutdown" }
+    //   ←─ { "id": "8", "ok": true }   (then exit 0)
     //
     // Errors and exceptions in the bridge surface as { ok: false, error: "..." }
     // — never as exit codes. A non-zero exit only happens on truly catastrophic
@@ -141,7 +168,16 @@ namespace SimLinkupCalibrationBridge
                     var sim = (string)req["sim"];
                     var bridge = SimRegistry.Get(sim);
                     if (bridge == null) return ErrorResp(id, $"Unknown sim '{sim}'.");
-                    if (bridge.IsSimRunning())
+                    // Opt-in escape hatch for callers that don't care
+                    // about the sim overwriting written values — the
+                    // PoKeys test path uses this because it only needs
+                    // SimLinkup to see the value briefly to drive the
+                    // relay. The live-calibration path keeps the
+                    // default guard (sim running == values get
+                    // clobbered on next tick == calibration is
+                    // useless).
+                    bool allowSimRunning = req["allowSimRunning"]?.ToObject<bool>() ?? false;
+                    if (!allowSimRunning && bridge.IsSimRunning())
                     {
                         return ErrorResp(id,
                             "The sim's runtime process is currently running. " +
@@ -214,6 +250,253 @@ namespace SimLinkupCalibrationBridge
                     return resp;
                 }
 
+                case "pokeys.enumerate":
+                {
+                    // Scan for plugged-in PoKeys devices on USB AND
+                    // Ethernet. Stateless request/response — no
+                    // session lifecycle, no dependency on a running
+                    // sim. The DLL does the USB enumeration
+                    // synchronously (<100 ms with a few boards). For
+                    // the network scan, the DLL broadcasts a discovery
+                    // packet and waits ethernetDiscoveryTimeout
+                    // milliseconds for responses; 2000 ms is enough
+                    // for cross-subnet discovery on busy networks
+                    // while staying inside the bridge's 5 s request
+                    // timeout (main.js bridgeRequest).
+                    //
+                    // Connect-and-disconnect-per-call is deliberate:
+                    // the editor is a casual consumer (one click of
+                    // Detect now and then, not continuous output drive)
+                    // so holding the device handle would needlessly
+                    // lock it out from other apps — the PoKeys vendor
+                    // tool, a separately running SimLinkup, etc. Each
+                    // enumerate call grabs a fresh connection only
+                    // long enough to read the device list, then
+                    // releases. The DLL's EnumeratePoKeysDevices does
+                    // its own per-device connect/disconnect internally;
+                    // we still call DisconnectDevice() on the local
+                    // instance afterward as belt-and-suspenders.
+                    PoKeysDevice device = null;
+                    try
+                    {
+                        device = new PoKeysDevice();
+                        var found = device.EnumeratePoKeysDevices(
+                            extendedDeviceInformation: true,
+                            enumerateUSBdevices: true,
+                            enumerateNetworkDevices: true,
+                            ethernetDiscoveryTimeout: 2000);
+                        var devices = new JArray();
+                        if (found != null)
+                        {
+                            foreach (var info in found)
+                            {
+                                if (info == null) continue;
+                                var data = info.deviceData;
+                                // DeviceName / DeviceHWName come back as
+                                // fixed-width buffers padded with nulls
+                                // (and occasionally garbage past the
+                                // first null). Trim at the first null
+                                // and strip any remaining non-printable
+                                // bytes so the editor doesn't render
+                                // mojibake like "UHF".
+                                // Surface the connection type so the
+                                // editor can show USB / Network in the
+                                // picker — useful when both kinds are
+                                // detected and the user needs to pick
+                                // the right one.
+                                var conn = info.connectionType == ePoKeysDeviceConnectionType.NetworkDevice
+                                    ? "network"
+                                    : "usb";
+                                var item = new JObject
+                                {
+                                    ["serial"]     = (uint)info.SerialNumber,
+                                    ["userId"]     = (int)data.UserID,
+                                    ["name"]       = SanitizeDeviceString(data.DeviceName),
+                                    ["hwName"]     = SanitizeDeviceString(data.DeviceHWName),
+                                    ["firmware"]   = $"{data.FirmwareVersionMajor / 16}.{data.FirmwareVersionMajor % 16}.{data.FirmwareVersionMinor}",
+                                    ["connection"] = conn,
+                                };
+                                devices.Add(item);
+                            }
+                        }
+                        resp["ok"] = true;
+                        resp["devices"] = devices;
+                        return resp;
+                    }
+                    catch (Exception e)
+                    {
+                        return ErrorResp(id, $"PoKeys enumeration failed: {e.Message}");
+                    }
+                    finally
+                    {
+                        // Defensive disconnect in case the enumerator
+                        // left a handle open. Errors here are ignored —
+                        // we're just being tidy.
+                        try { device?.DisconnectDevice(); } catch { }
+                    }
+                }
+
+                case "pokeys.setOutput":
+                {
+                    // Test-drive a single PoKeys output. Latched: the
+                    // device holds whatever state we wrote until the
+                    // next call. Connect/disconnect per call so the
+                    // device stays free for SimLinkup or the vendor
+                    // tool between clicks.
+                    //
+                    // Request shape:
+                    //   { cmd: "pokeys.setOutput",
+                    //     serial: 52153,
+                    //     kind: "digital" | "pwm" | "extbus",
+                    //     index: 1..55 | 1..6 | 1..80,
+                    //     value: 0|1 (digital/extbus) | 0..1 (pwm),
+                    //     invert: bool (digital/extbus, default false),
+                    //     pwmPeriodMicroseconds: number (pwm only,
+                    //                                   default 20000) }
+                    var serialReq = req["serial"]?.ToObject<uint>() ?? 0u;
+                    var kind = (string)req["kind"] ?? "";
+                    var index = req["index"]?.ToObject<int>() ?? 0;
+                    var valueToken = req["value"];
+                    var invert = req["invert"]?.ToObject<bool>() ?? false;
+                    if (serialReq == 0) return ErrorResp(id, "serial is required.");
+                    if (kind != "digital" && kind != "pwm" && kind != "extbus")
+                        return ErrorResp(id, $"Unknown PoKeys output kind '{kind}'.");
+
+                    PoKeysDevice testDevice = null;
+                    try
+                    {
+                        testDevice = new PoKeysDevice();
+                        // Locate the configured serial in the
+                        // currently-plugged-in set. Fail fast with a
+                        // helpful error if the board isn't reachable —
+                        // most likely cause is "SimLinkup is running
+                        // and holding the connection," but we can't
+                        // tell that apart from "board unplugged" so
+                        // the message covers both.
+                        var found = testDevice.EnumeratePoKeysDevices(true, true, true, 2000);
+                        PoKeysDeviceInfo target = null;
+                        if (found != null)
+                        {
+                            foreach (var info in found)
+                            {
+                                if (info != null && (uint)info.SerialNumber == serialReq)
+                                {
+                                    target = info;
+                                    break;
+                                }
+                            }
+                        }
+                        if (target == null)
+                            return ErrorResp(id, $"PoKeys serial {serialReq} not found on USB or network. Plug it in, or stop SimLinkup if it's currently driving the board.");
+                        if (!testDevice.ConnectToDevice(target))
+                            return ErrorResp(id, $"Could not connect to PoKeys serial {serialReq}. Probably in use by SimLinkup or the PoKeys vendor tool.");
+
+                        if (kind == "digital")
+                        {
+                            if (index < 1 || index > 55) return ErrorResp(id, $"Digital pin {index} out of range (1..55).");
+                            // Force the pin into output mode with the
+                            // right invert bit before writing — pins
+                            // default to digital input on power-up.
+                            byte function = (byte)(0x04 | (invert ? 0x80 : 0));
+                            testDevice.SetPinData((byte)(index - 1), function);
+                            bool boolValue = (valueToken?.ToObject<int>() ?? 0) != 0;
+                            testDevice.SetOutput((byte)(index - 1), boolValue);
+                        }
+                        else if (kind == "extbus")
+                        {
+                            if (index < 1 || index > 80) return ErrorResp(id, $"PoExtBus bit {index} out of range (1..80).");
+                            // Read current state so we don't blow
+                            // away other bits the user previously
+                            // set. AuxilaryBusGetData reads back the
+                            // device's last-sent output payload.
+                            byte enabled = 0;
+                            byte[] cache = new byte[10];
+                            try
+                            {
+                                // Some DLL versions don't support get
+                                // — if it fails, start from zeros
+                                // (safe but loses prior bit state).
+                                testDevice.AuxilaryBusGetData(ref enabled);
+                            }
+                            catch { /* ok; cache stays zero */ }
+                            bool boolValue = (valueToken?.ToObject<int>() ?? 0) != 0;
+                            bool effective = invert ? !boolValue : boolValue;
+                            int byteIndex = (index - 1) / 8;
+                            int bitInByte = (index - 1) % 8;
+                            byte mask = (byte)(1 << bitInByte);
+                            if (effective) cache[byteIndex] |= mask;
+                            else cache[byteIndex] &= (byte)~mask;
+                            testDevice.AuxilaryBusSetData(1, cache);
+                        }
+                        else // pwm
+                        {
+                            if (index < 1 || index > 6) return ErrorResp(id, $"PWM channel {index} out of range (1..6).");
+                            double frac = valueToken?.ToObject<double>() ?? 0.0;
+                            if (frac < 0) frac = 0;
+                            if (frac > 1) frac = 1;
+                            uint periodMicros = req["pwmPeriodMicroseconds"]?.ToObject<uint>() ?? 20000u;
+                            double freqHz = testDevice.GetPWMFrequency();
+                            double cyclesDouble = periodMicros * (freqHz / 1e6);
+                            if (cyclesDouble < 1) cyclesDouble = 1;
+                            if (cyclesDouble > uint.MaxValue) cyclesDouble = uint.MaxValue;
+                            uint period = (uint)cyclesDouble;
+                            // Reverse channel index (PWM1 -> slot 5).
+                            bool[] enables = new bool[6];
+                            uint[] duty = new uint[6];
+                            enables[6 - index] = true;
+                            duty[6 - index] = (uint)(frac * period);
+                            testDevice.SetPWMOutputs(ref enables, ref period, ref duty);
+                        }
+
+                        resp["ok"] = true;
+                        return resp;
+                    }
+                    catch (Exception e)
+                    {
+                        return ErrorResp(id, $"PoKeys output write failed: {e.Message}");
+                    }
+                    finally
+                    {
+                        try { testDevice?.DisconnectDevice(); } catch { }
+                    }
+                }
+
+                case "system.isSimLinkupRunning":
+                {
+                    // Fast running-state check via a kernel mutex that
+                    // SimLinkup creates at startup (see SimLinkup's
+                    // Program.Main, "Local\\SimLinkupRunning"). The
+                    // alternative — shelling out to `tasklist` — was
+                    // taking ~3 seconds on the user's machine (likely
+                    // AV/Defender hooking process enumeration), which
+                    // showed up as 4-second per-click latency on the
+                    // PoKeys test buttons. OpenMutex is a kernel call
+                    // and returns in microseconds.
+                    //
+                    // SYNCHRONIZE access is the minimum needed to open
+                    // the handle; we don't need to wait/release/own
+                    // anything. The kernel auto-releases the mutex when
+                    // SimLinkup exits or crashes, so a stale "running"
+                    // result isn't possible.
+                    bool running = false;
+                    try
+                    {
+                        IntPtr h = OpenMutex(SYNCHRONIZE, false, "Local\\SimLinkupRunning");
+                        if (h != IntPtr.Zero)
+                        {
+                            CloseHandle(h);
+                            running = true;
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        return ErrorResp(id, $"OpenMutex failed: {e.Message}");
+                    }
+                    resp["ok"]      = true;
+                    resp["running"] = running;
+                    return resp;
+                }
+
                 case "shutdown":
                     resp["ok"] = true;
                     return resp;
@@ -221,6 +504,40 @@ namespace SimLinkupCalibrationBridge
                 default:
                     return ErrorResp(id, $"Unknown command '{cmd}'.");
             }
+        }
+
+        // P/Invoke for the SimLinkup-running mutex check.
+        // SYNCHRONIZE (0x00100000) is the minimum access right needed
+        // to open the handle; we never wait or release.
+        private const uint SYNCHRONIZE = 0x00100000;
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        private static extern IntPtr OpenMutex(uint dwDesiredAccess, bool bInheritHandle, string lpName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr hObject);
+
+        // Trim a PoKeys device-name buffer at the first null and strip
+        // remaining non-printable bytes. The DLL hands us fixed-width
+        // string fields (DeviceName ~10 bytes, DeviceHWName ~10 bytes)
+        // that are null-padded, but occasionally the bytes past the
+        // first null are garbage from a stale buffer rather than zeros.
+        // C#'s string conversion would otherwise carry that garbage
+        // through to JSON and the editor would render mojibake.
+        private static string SanitizeDeviceString(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "";
+            // First-null cutoff handles the well-formed null-padded
+            // case; the printable filter catches the stale-buffer case.
+            int nul = raw.IndexOf('\0');
+            if (nul >= 0) raw = raw.Substring(0, nul);
+            var sb = new System.Text.StringBuilder(raw.Length);
+            foreach (var c in raw)
+            {
+                if (c >= 0x20 && c < 0x7F) sb.Append(c);
+            }
+            return sb.ToString().Trim();
         }
 
         private static JObject ErrorResp(string id, string message)

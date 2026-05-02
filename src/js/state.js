@@ -32,3 +32,14 @@ let activeTab = 'hardware';
 let instSearch = '';
 let instFilter = 'all';
 let instMfrFilter = 'all';
+
+// Mappings tab filter state. Same persistence model as the
+// Instruments-tab filters above (module-scope let, persists across
+// re-renders within a session, resets on page reload).
+//   mapSearch       — substring match against card title (gauge name,
+//                     gauge PN, direct group name).
+//   mapStatusFilter — 'all' | 'complete' | 'partial' | 'none' | 'broken'.
+//   mapTypeFilter   — 'all' | 'gauges' | 'direct'.
+let mapSearch = '';
+let mapStatusFilter = 'all';
+let mapTypeFilter = 'all';

@@ -25,12 +25,19 @@ contextBridge.exposeInMainWorld('api', {
   // into the live sim's shared memory area. Used by the Calibration tab's
   // "Live calibration" mode — see bridge/SimLinkupCalibrationBridge/.
   bridge: {
-    isSimRunning: (sim)            => ipcRenderer.invoke('bridge:isSimRunning', { sim }),
-    startSession: (sim)            => ipcRenderer.invoke('bridge:startSession', { sim }),
-    setSignals:   (sim, signals)   => ipcRenderer.invoke('bridge:setSignals', { sim, signals }),
-    getSignals:   (sim, ids)       => ipcRenderer.invoke('bridge:getSignals', { sim, ids }),
-    endSession:   (sim)            => ipcRenderer.invoke('bridge:endSession', { sim }),
+    isSimRunning:    (sim)            => ipcRenderer.invoke('bridge:isSimRunning', { sim }),
+    startSession:    (sim, opts)      => ipcRenderer.invoke('bridge:startSession', { sim, opts: opts || {} }),
+    setSignals:      (sim, signals)   => ipcRenderer.invoke('bridge:setSignals', { sim, signals }),
+    getSignals:      (sim, ids)       => ipcRenderer.invoke('bridge:getSignals', { sim, ids }),
+    endSession:      (sim)            => ipcRenderer.invoke('bridge:endSession', { sim }),
+    enumeratePoKeys:  ()                => ipcRenderer.invoke('bridge:enumeratePoKeys'),
+    setPoKeysOutput:  (args)            => ipcRenderer.invoke('bridge:setPoKeysOutput', args),
   },
+  // Process-level check (not a bridge call — main.js shells out to
+  // tasklist directly). Used by the PoKeys test handlers to decide
+  // whether to drive the device directly OR write to the sim's
+  // shared memory and let SimLinkup's normal pipeline handle it.
+  isSimLinkupRunning: () => ipcRenderer.invoke('isSimLinkupRunning'),
   // ── Auto-update ────────────────────────────────────────────────────────
   // Status pushes from main come on the 'update:status' channel; the
   // renderer's onStatus subscribes a callback that fires for every state

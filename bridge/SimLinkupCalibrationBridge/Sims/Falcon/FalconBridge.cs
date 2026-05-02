@@ -185,8 +185,189 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
         // and is reported back to the editor.
         private enum Routing { Primary, Secondary, Unknown }
 
+        // Caution panel + warning lights: signal id → list of
+        // (which lightBits* field, bit mask) pairs. Read side in
+        // F4SimSupportModule.cs does
+        //   ((LightBits*) fd.lightBits* & X) == X
+        // We do the inverse — set or clear each bit based on `value`.
+        // Truthy value (>= 0.5) sets the bit; anything else clears it.
+        //
+        // A list per signal (not a single pair) handles the few
+        // signals whose read site OR's two bits — e.g. LE_FLAPS reads
+        // LightBits.LEFlaps OR LightBits3.Lef_Fault, and ONGROUND
+        // reads LightBits.ONGROUND OR LightBits3.OnGround. Setting
+        // both keeps the in-memory struct internally consistent so
+        // subsequent reads (whether the sim's or the editor's) see
+        // matching values.
+        //
+        // Out of scope (intentionally NOT in the table — these would
+        // need additional staged state to drive correctly):
+        //   - F4_POWER__ELEC_POWER_OFF: reads `bit OR !IsSimRunning`,
+        //     so when BMS isn't running the light stays on no matter
+        //     what we write.
+        //   - F4_EWPI__ML/PRI/UNK/HANDOFF/NAVAL/TARGET_SEP/SEARCH/etc.:
+        //     also gated on CmdsMode != CmdsOFF.
+        // The corresponding TWP/TWA/CMDS direct light-bit signals
+        // are in the table — wire those instead.
+        //
+        // Signals with BlinkBits suppression (OXY_BROW, ELEC_SYS,
+        // PROBE_HEAT, EPU_RUN, JFS_RUN, TWP missile-launch/PriMode/
+        // Unk, TWA Search) are still driven by setting their
+        // LightBits/2/3 bit — the BlinkBits modifier only causes the
+        // sim to blink the light. With BlinkBits left at zero (its
+        // default in the staged struct) the light goes steady-on
+        // when the LightBits bit is set, which is what the user wants
+        // for a relay test.
+        private enum LightField { Bits1, Bits2, Bits3 }
+        private static readonly Dictionary<string, (LightField field, uint mask)[]> _lightBitMap =
+            new Dictionary<string, (LightField, uint)[]>
+            {
+                // ── Gear panel ────────────────────────────────────────
+                { "F4_GEAR_PANEL__NOSE_GEAR_DOWN_LIGHT",  new[] { (LightField.Bits3, (uint)LightBits3.NoseGearDown)  } },
+                { "F4_GEAR_PANEL__LEFT_GEAR_DOWN_LIGHT",  new[] { (LightField.Bits3, (uint)LightBits3.LeftGearDown)  } },
+                { "F4_GEAR_PANEL__RIGHT_GEAR_DOWN_LIGHT", new[] { (LightField.Bits3, (uint)LightBits3.RightGearDown) } },
+                { "F4_GEAR_PANEL__GEAR_HANDLE_LIGHT",     new[] { (LightField.Bits2, (uint)LightBits2.GEARHANDLE)    } },
+                { "F4_GEAR_PANEL__PARKING_BRAKE_ENGAGED_FLAG", new[] { (LightField.Bits3, (uint)LightBits3.ParkBrakeOn) } },
+
+                // ── Speed brake ───────────────────────────────────────
+                { "F4_SPEED_BRAKE__NOT_STOWED_FLAG", new[] { (LightField.Bits3, (uint)LightBits3.SpeedBrake) } },
+
+                // ── Master caution + eyebrow ─────────────────────────
+                { "F4_MASTER_CAUTION_LIGHT",                 new[] { (LightField.Bits1, (uint)LightBits.MasterCaution) } },
+                { "F4_MASTER_CAUTION_ANNOUNCED",             new[] { (LightField.Bits3, (uint)LightBits3.MCAnnounced)  } },
+                { "F4_LEFT_EYEBROW_LIGHTS__TFFAIL",          new[] { (LightField.Bits1, (uint)LightBits.TF)            } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__ENGFIRE",        new[] { (LightField.Bits1, (uint)LightBits.ENG_FIRE)      } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__ENGINE",         new[] { (LightField.Bits2, (uint)LightBits2.ENGINE)       } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__HYDOIL",         new[] { (LightField.Bits1, (uint)LightBits.HYD)           } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__FLCS",           new[] { (LightField.Bits1, (uint)LightBits.FLCS)          } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__CANOPY",         new[] { (LightField.Bits1, (uint)LightBits.CAN)           } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__TO_LDG_CONFIG",  new[] { (LightField.Bits1, (uint)LightBits.T_L_CFG)       } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__OXY_LOW",        new[] { (LightField.Bits1, (uint)LightBits.OXY_BROW)      } },
+                { "F4_RIGHT_EYEBROW_LIGHTS__DBU_ON",         new[] { (LightField.Bits3, (uint)LightBits3.DbuWarn)      } },
+
+                // ── Caution panel ────────────────────────────────────
+                { "F4_CAUTION_PANEL__FLCS_FAULT",   new[] { (LightField.Bits1, (uint)LightBits.FltControlSys) } },
+                // LE_FLAPS read site OR's two bits — set both so the
+                // light is driven regardless of which arm the editor's
+                // calibration mapping wires up.
+                { "F4_CAUTION_PANEL__LE_FLAPS",     new[] { (LightField.Bits1, (uint)LightBits.LEFlaps),
+                                                            (LightField.Bits3, (uint)LightBits3.Lef_Fault) } },
+                { "F4_CAUTION_PANEL__ELEC_SYS",     new[] { (LightField.Bits3, (uint)LightBits3.Elec_Fault)  } },
+                { "F4_CAUTION_PANEL__ENGINE_FAULT", new[] { (LightField.Bits1, (uint)LightBits.EngineFault)  } },
+                { "F4_CAUTION_PANEL__SEC",          new[] { (LightField.Bits2, (uint)LightBits2.SEC)         } },
+                { "F4_CAUTION_PANEL__FWD_FUEL_LOW", new[] { (LightField.Bits2, (uint)LightBits2.FwdFuelLow)  } },
+                { "F4_CAUTION_PANEL__AFT_FUEL_LOW", new[] { (LightField.Bits2, (uint)LightBits2.AftFuelLow)  } },
+                { "F4_CAUTION_PANEL__OVERHEAT",     new[] { (LightField.Bits1, (uint)LightBits.Overheat)     } },
+                { "F4_CAUTION_PANEL__BUC",          new[] { (LightField.Bits2, (uint)LightBits2.BUC)         } },
+                { "F4_CAUTION_PANEL__FUEL_OIL_HOT", new[] { (LightField.Bits2, (uint)LightBits2.FUEL_OIL_HOT)} },
+                { "F4_CAUTION_PANEL__SEAT_NOT_ARMED", new[] { (LightField.Bits2, (uint)LightBits2.SEAT_ARM)  } },
+                { "F4_CAUTION_PANEL__AVIONICS_FAULT", new[] { (LightField.Bits1, (uint)LightBits.Avionics)   } },
+                { "F4_CAUTION_PANEL__RADAR_ALT",    new[] { (LightField.Bits1, (uint)LightBits.RadarAlt)     } },
+                { "F4_CAUTION_PANEL__EQUIP_HOT",    new[] { (LightField.Bits1, (uint)LightBits.EQUIP_HOT)    } },
+                { "F4_CAUTION_PANEL__ECM",          new[] { (LightField.Bits1, (uint)LightBits.ECM)          } },
+                { "F4_CAUTION_PANEL__STORES_CONFIG",new[] { (LightField.Bits1, (uint)LightBits.CONFIG)       } },
+                { "F4_CAUTION_PANEL__ANTI_SKID",    new[] { (LightField.Bits2, (uint)LightBits2.ANTI_SKID)   } },
+                { "F4_CAUTION_PANEL__HOOK",         new[] { (LightField.Bits1, (uint)LightBits.Hook)         } },
+                { "F4_CAUTION_PANEL__NWS_FAIL",     new[] { (LightField.Bits1, (uint)LightBits.NWSFail)      } },
+                { "F4_CAUTION_PANEL__CABIN_PRESS",  new[] { (LightField.Bits1, (uint)LightBits.CabinPress)   } },
+                { "F4_CAUTION_PANEL__OXY_LOW",      new[] { (LightField.Bits2, (uint)LightBits2.OXY_LOW)     } },
+                { "F4_CAUTION_PANEL__PROBE_HEAT",   new[] { (LightField.Bits2, (uint)LightBits2.PROBEHEAT)   } },
+                { "F4_CAUTION_PANEL__FUEL_LOW",     new[] { (LightField.Bits1, (uint)LightBits.FuelLow)      } },
+                { "F4_CAUTION_PANEL__IFF",          new[] { (LightField.Bits1, (uint)LightBits.IFF)          } },
+                { "F4_CAUTION_PANEL__C_ADC",        new[] { (LightField.Bits3, (uint)LightBits3.cadc)        } },
+                { "F4_CAUTION_PANEL__ATF_NOT_ENGAGED", new[] { (LightField.Bits3, (uint)LightBits3.ATF_Not_Engaged) } },
+
+                // ── AOA + NWS indexers ───────────────────────────────
+                { "F4_AOA_INDEXER__AOA_TOO_HIGH", new[] { (LightField.Bits1, (uint)LightBits.AOAAbove)   } },
+                { "F4_AOA_INDEXER__AOA_IDEAL",    new[] { (LightField.Bits1, (uint)LightBits.AOAOn)      } },
+                { "F4_AOA_INDEXER__AOA_TOO_LOW",  new[] { (LightField.Bits1, (uint)LightBits.AOABelow)   } },
+                { "F4_NWS_INDEXER__RDY",          new[] { (LightField.Bits1, (uint)LightBits.RefuelRDY)  } },
+                { "F4_NWS_INDEXER__AR_NWS",       new[] { (LightField.Bits1, (uint)LightBits.RefuelAR)   } },
+                { "F4_NWS_INDEXER__DISC",         new[] { (LightField.Bits1, (uint)LightBits.RefuelDSC)  } },
+
+                // ── TWP / TWA (RWR) ──────────────────────────────────
+                { "F4_TWP__HANDOFF",         new[] { (LightField.Bits2, (uint)LightBits2.HandOff)  } },
+                { "F4_TWP__MISSILE_LAUNCH",  new[] { (LightField.Bits2, (uint)LightBits2.Launch)   } },
+                { "F4_TWP__PRIORITY_MODE",   new[] { (LightField.Bits2, (uint)LightBits2.PriMode)  } },
+                { "F4_TWP__UNKNOWN",         new[] { (LightField.Bits2, (uint)LightBits2.Unk)      } },
+                { "F4_TWP__NAVAL",           new[] { (LightField.Bits2, (uint)LightBits2.Naval)    } },
+                { "F4_TWP__TARGET_SEP",      new[] { (LightField.Bits2, (uint)LightBits2.TgtSep)   } },
+                { "F4_TWP__SYS_TEST",        new[] { (LightField.Bits3, (uint)LightBits3.SysTest)  } },
+                { "F4_TWA__SEARCH",          new[] { (LightField.Bits2, (uint)LightBits2.AuxSrch)  } },
+                { "F4_TWA__ACTIVITY_POWER",  new[] { (LightField.Bits2, (uint)LightBits2.AuxAct)   } },
+                { "F4_TWA__LOW_ALTITUDE",    new[] { (LightField.Bits2, (uint)LightBits2.AuxLow)   } },
+                { "F4_TWA__SYSTEM_POWER",    new[] { (LightField.Bits2, (uint)LightBits2.AuxPwr)   } },
+
+                // ── ECM + misc / autopilot ───────────────────────────
+                { "F4_ECM__POWER",                new[] { (LightField.Bits2, (uint)LightBits2.EcmPwr)        } },
+                { "F4_ECM__FAIL",                 new[] { (LightField.Bits2, (uint)LightBits2.EcmFail)       } },
+                { "F4_MISC__ADV_MODE_ACTIVE",     new[] { (LightField.Bits2, (uint)LightBits2.TFR_ENGAGED)   } },
+                { "F4_MISC__ADV_MODE_STBY",       new[] { (LightField.Bits1, (uint)LightBits.TFR_STBY)       } },
+                { "F4_MISC__AUTOPILOT_ENGAGED",   new[] { (LightField.Bits1, (uint)LightBits.AutoPilotOn)    } },
+
+                // ── CMDS panel ───────────────────────────────────────
+                { "F4_CMDS__GO",          new[] { (LightField.Bits2, (uint)LightBits2.Go)       } },
+                { "F4_CMDS__NOGO",        new[] { (LightField.Bits2, (uint)LightBits2.NoGo)     } },
+                { "F4_CMDS__AUTO_DEGR",   new[] { (LightField.Bits2, (uint)LightBits2.Degr)     } },
+                { "F4_CMDS__DISPENSE_RDY",new[] { (LightField.Bits2, (uint)LightBits2.Rdy)      } },
+                { "F4_CMDS__CHAFF_LO",    new[] { (LightField.Bits2, (uint)LightBits2.ChaffLo)  } },
+                { "F4_CMDS__FLARE_LO",    new[] { (LightField.Bits2, (uint)LightBits2.FlareLo)  } },
+
+                // ── Electric panel ───────────────────────────────────
+                { "F4_ELEC__FLCS_PMG",  new[] { (LightField.Bits3, (uint)LightBits3.FlcsPmg)   } },
+                { "F4_ELEC__MAIN_GEN",  new[] { (LightField.Bits3, (uint)LightBits3.MainGen)   } },
+                { "F4_ELEC__STBY_GEN",  new[] { (LightField.Bits3, (uint)LightBits3.StbyGen)   } },
+                { "F4_ELEC__EPU_GEN",   new[] { (LightField.Bits3, (uint)LightBits3.EpuGen)    } },
+                { "F4_ELEC__EPU_PMG",   new[] { (LightField.Bits3, (uint)LightBits3.EpuPmg)    } },
+                { "F4_ELEC__TO_FLCS",   new[] { (LightField.Bits3, (uint)LightBits3.ToFlcs)    } },
+                { "F4_ELEC__FLCS_RLY",  new[] { (LightField.Bits3, (uint)LightBits3.FlcsRly)   } },
+                { "F4_ELEC__BATT_FAIL", new[] { (LightField.Bits3, (uint)LightBits3.BatFail)   } },
+
+                // ── Test / EPU / JFS ─────────────────────────────────
+                { "F4_TEST__ABCD",   new[] { (LightField.Bits1, (uint)LightBits.Flcs_ABCD)  } },
+                { "F4_EPU__HYDRAZN", new[] { (LightField.Bits3, (uint)LightBits3.Hydrazine) } },
+                { "F4_EPU__AIR",     new[] { (LightField.Bits3, (uint)LightBits3.Air)       } },
+                { "F4_EPU__RUN",     new[] { (LightField.Bits2, (uint)LightBits2.EPUOn)     } },
+                { "F4_JFS__RUN",     new[] { (LightField.Bits2, (uint)LightBits2.JFSOn)     } },
+
+                // ── Aircraft state (WoW + on-ground) ─────────────────
+                // ONGROUND read OR's two bits — set both.
+                { "F4_AIRCRAFT__ONGROUND", new[] { (LightField.Bits1, (uint)LightBits.ONGROUND),
+                                                   (LightField.Bits3, (uint)LightBits3.OnGround) } },
+                { "F4_AIRCRAFT__MAIN_LANDING_GEAR__WEIGHT_ON_WHEELS", new[] { (LightField.Bits3, (uint)LightBits3.MLGWOW) } },
+                { "F4_AIRCRAFT__NOSE_LANDING_GEAR__WEIGHT_ON_WHEELS", new[] { (LightField.Bits3, (uint)LightBits3.NLGWOW) } },
+
+                // ── Flight control test panel ────────────────────────
+                { "F4_FLIGHT_CONTROL__RUN",  new[] { (LightField.Bits3, (uint)LightBits3.FlcsBitRun)  } },
+                { "F4_FLIGHT_CONTROL__FAIL", new[] { (LightField.Bits3, (uint)LightBits3.FlcsBitFail) } },
+            };
+
         private static Routing RouteSignal(string id, double value, ref BMS4FlightData fd, ref FlightData2 fd2)
         {
+            // Light-bit signals share one shape — set/clear one or
+            // more bits in a uint field on the primary FlightData.
+            // Handle them through the table BEFORE the switch so the
+            // switch stays focused on per-signal numeric transforms.
+            if (_lightBitMap.TryGetValue(id, out var entries))
+            {
+                bool on = value >= 0.5;
+                foreach (var entry in entries)
+                {
+                    switch (entry.field)
+                    {
+                        case LightField.Bits1:
+                            fd.lightBits  = on ? (fd.lightBits  | entry.mask) : (fd.lightBits  & ~entry.mask);
+                            break;
+                        case LightField.Bits2:
+                            fd.lightBits2 = on ? (fd.lightBits2 | entry.mask) : (fd.lightBits2 & ~entry.mask);
+                            break;
+                        case LightField.Bits3:
+                            fd.lightBits3 = on ? (fd.lightBits3 | entry.mask) : (fd.lightBits3 & ~entry.mask);
+                            break;
+                    }
+                }
+                return Routing.Primary;
+            }
             switch (id)
             {
                 // ── BMS4FlightData (primary) ──────────────────────────

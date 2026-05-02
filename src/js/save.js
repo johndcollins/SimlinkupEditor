@@ -61,23 +61,11 @@ function generateDriverConfigs(p) {
         content: renderNiclasMorinDTSConfig(decl),
         createOnly: false,
       };
-    } else if (driverId === 'pokeys_digital') {
-      // PoKeys is split across two driver ids in the editor catalog
-      // (`pokeys_digital` for digital pins, `pokeys_pwm` for PWM
-      // channels) so the kind-mismatch validator can key off a flat
-      // driver -> kind map. They share `decl` by reference (see
-      // parseDriverConfigs); only the digital id renders the file
-      // to avoid double-writing. `pokeys_pwm` carries
-      // skipConfigFile:true in DRIVER_META so it's never reached
-      // here as a writer. Without that contract, the second branch
-      // would overwrite the first with identical content — harmless
-      // but wasteful, and confusing in commit diffs.
+    } else if (driverId === 'pokeys') {
       out['PoKeysHardwareSupportModule.config'] = {
         content: renderPoKeysConfig(decl),
         createOnly: false,
       };
-    } else if (driverId === 'pokeys_pwm') {
-      // Intentionally no-op. See pokeys_digital branch above.
     }
     // Other drivers: no auto-generation yet. The user adds them in the
     // Hardware tab → they appear in the registry, but the .config file (if
@@ -582,10 +570,9 @@ function renderNiclasMorinDTSConfig(decl) {
 }
 
 // Build the PoKeysHardwareSupportModule.config XML from
-// p.drivers.pokeys_digital (which shares its devices array by reference
-// with p.drivers.pokeys_pwm). Per-device element order matches the C#
-// class declaration order: Serial, Name, PWMPeriodMicroseconds,
-// DigitalOutputs, PWMOutputs. Root is <PoKeys>.
+// p.drivers.pokeys. Per-device element order matches the C# class
+// declaration order: Serial, Name, PWMPeriodMicroseconds,
+// DigitalOutputs, PWMOutputs, PoExtBusOutputs. Root is <PoKeys>.
 //
 // Empty <DigitalOutputs/> and <PWMOutputs/> are emitted as self-closing
 // elements rather than being omitted, so the on-disk file is
@@ -608,6 +595,7 @@ function renderPoKeysConfig(decl) {
     lines.push(`      <Serial>${escXml(dev.address ?? '')}</Serial>`);
     lines.push(`      <Name>${escXml(dev.name ?? '')}</Name>`);
     lines.push(`      <PWMPeriodMicroseconds>${dev.pwmPeriodMicroseconds ?? POKEYS_DEVICE_DEFAULTS.pwmPeriodMicroseconds}</PWMPeriodMicroseconds>`);
+    lines.push(`      <ConnectPerWrite>${dev.connectPerWrite ? 'true' : 'false'}</ConnectPerWrite>`);
 
     const digOuts = Array.isArray(dev.digitalOutputs) ? dev.digitalOutputs : [];
     if (digOuts.length === 0) {
@@ -617,6 +605,7 @@ function renderPoKeysConfig(decl) {
       for (const o of digOuts) {
         lines.push('        <Output>');
         lines.push(`          <Pin>${o.pin}</Pin>`);
+        lines.push(`          <Name>${escXml(o.name ?? '')}</Name>`);
         lines.push(`          <Invert>${o.invert ? 'true' : 'false'}</Invert>`);
         lines.push('        </Output>');
       }
@@ -631,9 +620,28 @@ function renderPoKeysConfig(decl) {
       for (const o of pwmOuts) {
         lines.push('        <Output>');
         lines.push(`          <Channel>${o.channel}</Channel>`);
+        lines.push(`          <Name>${escXml(o.name ?? '')}</Name>`);
         lines.push('        </Output>');
       }
       lines.push('      </PWMOutputs>');
+    }
+
+    // PoExtBus shift-register chain: 1..80 bit outputs. Same shape as
+    // DigitalOutputs (Bit + Invert) since the editor and runtime treat
+    // each PoExtBus bit as a software-invertable digital output.
+    const extOuts = Array.isArray(dev.extBusOutputs) ? dev.extBusOutputs : [];
+    if (extOuts.length === 0) {
+      lines.push('      <PoExtBusOutputs />');
+    } else {
+      lines.push('      <PoExtBusOutputs>');
+      for (const o of extOuts) {
+        lines.push('        <Output>');
+        lines.push(`          <Bit>${o.bit}</Bit>`);
+        lines.push(`          <Name>${escXml(o.name ?? '')}</Name>`);
+        lines.push(`          <Invert>${o.invert ? 'true' : 'false'}</Invert>`);
+        lines.push('        </Output>');
+      }
+      lines.push('      </PoExtBusOutputs>');
     }
 
     lines.push('    </Device>');
@@ -654,8 +662,12 @@ function renderPoKeysConfig(decl) {
 function generateMappingFiles(p) {
   // Group edges by which gauge they belong to.
   // Stage-1 edges belong to dstGaugePn. Stage-2 edges belong to srcGaugePn.
-  // Edges that don't reference any gauge land in a misc bucket.
+  // Direct edges (sim → driver) live outside the gauge model — they're
+  // grouped by their `directGroupId` and written to one file per group
+  // (Direct_<sanitised name>.mapping). Edges that don't reference any
+  // gauge AND aren't direct land in a misc bucket.
   const byGauge = new Map();
+  const byDirectGroupId = new Map();
   const misc = [];
   for (const e of p.chain.edges) {
     let pn = null;
@@ -664,6 +676,9 @@ function generateMappingFiles(p) {
     if (pn) {
       if (!byGauge.has(pn)) byGauge.set(pn, []);
       byGauge.get(pn).push(e);
+    } else if (e.stage === 'direct' && e.directGroupId) {
+      if (!byDirectGroupId.has(e.directGroupId)) byDirectGroupId.set(e.directGroupId, []);
+      byDirectGroupId.get(e.directGroupId).push(e);
     } else {
       misc.push(e);
     }
@@ -735,7 +750,95 @@ function generateMappingFiles(p) {
     files.push({ filename: 'OtherMappings.mapping', content: renderMappingXml(misc) });
   }
 
+  // Direct mapping groups — one file per declared group, named
+  // `Direct_<sanitised group name>.mapping`. Each file carries a
+  // [DirectGroup] header comment so empty groups (no inputs wired
+  // yet) still survive a round-trip; each row carries a [DirectInput]
+  // comment with its inputId so the editor can rebuild the group's
+  // input list on next load. Also emit a file for every declared
+  // group even if it has zero edges, so a newly-created-but-empty
+  // group doesn't vanish on save.
+  for (const group of (p.directGroups || [])) {
+    const edgesForGroup = byDirectGroupId.get(group.id) || [];
+    const filename = directMappingFilenameForGroup(group);
+    files.push({ filename, content: renderDirectMappingXml(group, edgesForGroup) });
+    byDirectGroupId.delete(group.id);
+  }
+  // Orphaned direct edges (have a directGroupId but no matching entry
+  // in p.directGroups). Shouldn't normally happen — the editor keeps
+  // these in sync — but if it does, dump them into OtherMappings to
+  // avoid losing the wiring silently.
+  for (const orphanEdges of byDirectGroupId.values()) {
+    misc.push(...orphanEdges);
+  }
+  // Re-emit OtherMappings if orphaned direct edges showed up (the
+  // earlier emit already happened).
+  if (byDirectGroupId.size > 0 && misc.length) {
+    // Replace the existing OtherMappings entry if present, else add.
+    const existingIdx = files.findIndex(f => f.filename === 'OtherMappings.mapping');
+    const content = renderMappingXml(misc);
+    if (existingIdx >= 0) files[existingIdx].content = content;
+    else files.push({ filename: 'OtherMappings.mapping', content });
+  }
+
   return files;
+}
+
+// Sanitise a group name into a filename. The user picks the group's
+// name freely (any unicode); the filename is restricted to safe
+// characters across Windows + everything else. We strip non-
+// alphanumerics rather than escaping them so the result reads as a
+// recognizable label even if the user typed punctuation.
+function directMappingFilenameForGroup(group) {
+  const raw = (group?.name || '').trim();
+  const safe = raw.replace(/[^A-Za-z0-9_-]+/g, '');
+  // Empty after sanitization? Fall back to the groupId so each
+  // file is still unique. The user shouldn't hit this in practice
+  // (the Direct tab requires a non-empty name) but be defensive
+  // against hand-edited or imported state.
+  const stem = safe || (group?.id ? `Group_${group.id.slice(0, 8)}` : 'Unnamed');
+  return `Direct_${stem}.mapping`;
+}
+
+// Build the XML for one direct group's .mapping file. Header comment
+// declares the group identity; each <SignalMapping> is preceded by
+// an [DirectInput] comment that carries the input's id + label + the
+// group identity (redundant with the header but keeps the row
+// reconstructible if comments get reordered or the header gets
+// stripped by hand-editing).
+function renderDirectMappingXml(group, edges) {
+  const lines = [
+    '<?xml version="1.0"?>',
+    '<MappingProfile xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <SignalMappings>',
+    `    <!-- [DirectGroup] Name: "${escXml(group.name || '')}" GroupId: "${escXml(group.id || '')}" SimId: "${escXml(group.simId || '')}" -->`,
+  ];
+  // Index inputs by id so we can pull the canonical sourceSignalId
+  // for each edge. The edge's `src` mirrors `input.sourceSignalId`
+  // at runtime — they should be in lockstep — but the input is the
+  // canonical store, so prefer it. Falls back to e.src for any legacy
+  // edge that was loaded before the source moved to the Direct tab.
+  const inputById = new Map();
+  for (const inp of (group.inputs || [])) inputById.set(inp.id, inp);
+  for (const e of edges) {
+    if (isKindMismatchedStage2Edge(e)) continue;
+    const input = inputById.get(e.directInputId) || { id: e.directInputId || '', sourceSignalId: '' };
+    const src = input.sourceSignalId || e.src || '';
+    if (!src || !e.dst) continue;
+    lines.push(`    <!-- [DirectInput] InputId: "${escXml(input.id || '')}" GroupId: "${escXml(group.id || '')}" GroupName: "${escXml(group.name || '')}" SimId: "${escXml(group.simId || '')}" -->`);
+    const type = e.kind === 'digital' ? 'DigitalSignal' : 'AnalogSignal';
+    lines.push('    <SignalMapping>');
+    lines.push(`      <Source xsi:type="${type}">`);
+    lines.push(`        <Id>${src}</Id>`);
+    lines.push('      </Source>');
+    lines.push(`      <Destination xsi:type="${type}">`);
+    lines.push(`        <Id>${e.dst}</Id>`);
+    lines.push('      </Destination>');
+    lines.push('    </SignalMapping>');
+  }
+  lines.push('  </SignalMappings>');
+  lines.push('</MappingProfile>');
+  return lines.join('\n');
 }
 
 // Default filename for a gauge that has no legacy filename captured
@@ -774,7 +877,7 @@ function mappingFilenameForGauge(pn, inst) {
 function isKindMismatchedStage2Edge(e) {
   if (!e || e.stage !== 2) return false;
   if (!e.dstDriver || e.dstDriverChannel == null || e.dstDriverChannel === '') return false;
-  const driverKind = DRIVER_CHANNEL_KIND[e.dstDriver];
+  const driverKind = getChannelKind(e.dstDriver, e.dstDriverChannel);
   if (!driverKind) return false;  // unknown driver — don't second-guess
   // The edge's `kind` is the gauge port's kind (analog/digital), set
   // by classifyMapping when the edge was first parsed. Mismatches are

@@ -97,7 +97,7 @@ function renderEditor() {
       <button class="tab-btn ${activeTab==='hardwareconfig'?'active':''}" onclick="switchTab('hardwareconfig',this)">Hardware Config (${driverCount})</button>
       <button class="tab-btn ${activeTab==='simsupport'?'active':''}" onclick="switchTab('simsupport',this)">SimSupport (${ssCount})</button>
       <button class="tab-btn ${activeTab==='instruments'?'active':''}" onclick="switchTab('instruments',this)">Instruments (${p.instruments.length})</button>
-      <button class="tab-btn ${activeTab==='active'?'active':''}" onclick="switchTab('active',this)">Active (${p.instruments.length})</button>
+      <button class="tab-btn ${activeTab==='direct'?'active':''}" onclick="switchTab('direct',this)">Direct (${(p.directGroups||[]).length})</button>
       <button class="tab-btn ${activeTab==='mappings'?'active':''}" onclick="switchTab('mappings',this)">Signal mappings (${p.chain.edges.length})${mappingsBadges}</button>
       <button class="tab-btn ${activeTab==='calibration'?'active':''}" onclick="switchTab('calibration',this)">Calibration (${calibratableCount})${calibrationBadges}</button>
     </div>
@@ -105,7 +105,7 @@ function renderEditor() {
     <div id="pane-hardwareconfig" class="tab-pane ${activeTab==='hardwareconfig'?'active':''}"></div>
     <div id="pane-simsupport"     class="tab-pane ${activeTab==='simsupport'?'active':''}"></div>
     <div id="pane-instruments"    class="tab-pane ${activeTab==='instruments'?'active':''}"></div>
-    <div id="pane-active"         class="tab-pane ${activeTab==='active'?'active':''}"></div>
+    <div id="pane-direct"         class="tab-pane ${activeTab==='direct'?'active':''}"></div>
     <div id="pane-mappings"       class="tab-pane ${activeTab==='mappings'?'active':''}"></div>
     <div id="pane-calibration"    class="tab-pane ${activeTab==='calibration'?'active':''}"></div>`;
 
@@ -113,7 +113,7 @@ function renderEditor() {
   renderHardwareConfig();
   renderSimSupport();
   renderInstruments();
-  renderActive();
+  renderDirect();
   renderMappings();
   renderCalibration();
 }

@@ -37,6 +37,15 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
+  // F12 toggles DevTools — temporary aid for diagnostics. Remove once
+  // the PoKeys test latency is figured out.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' && input.type === 'keyDown') {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -758,7 +767,10 @@ ipcMain.handle('open-driver-config', async (_, { profileDir, filename, defaultCo
 //   bridge:startSession  ({ sim })                   → { ok, error? }
 //   bridge:setSignals    ({ sim, signals })          → { ok, unknown?, error? }
 //   bridge:getSignals    ({ sim, ids })              → { ok, values?, unknown?, error? }
-//   bridge:endSession    ({ sim })                   → { ok, error? }
+//   bridge:endSession      ({ sim })                 → { ok, error? }
+//   bridge:enumeratePoKeys ()                        → { ok, devices?[{serial,userId,name,hwName,firmware,connection}], error? }
+//   bridge:setPoKeysOutput ({ serial, kind, index, value, invert?, pwmPeriodMicroseconds? })
+//                                                    → { ok, error? }
 //
 // We hold ONE bridge process per app session. App quit kills it.
 
@@ -865,9 +877,17 @@ ipcMain.handle('bridge:isSimRunning', async (_, { sim }) => {
   catch (e) { return { ok: false, error: e.message }; }
 });
 
-ipcMain.handle('bridge:startSession', async (_, { sim }) => {
-  try { return await bridgeRequest('startSession', { sim }); }
-  catch (e) { return { ok: false, error: e.message }; }
+ipcMain.handle('bridge:startSession', async (_, { sim, opts }) => {
+  // opts.allowSimRunning bypasses the bridge's "sim is running"
+  // guard. Only the PoKeys test path uses it — live calibration
+  // wants the guard to stay because BMS would overwrite scrubbed
+  // values on every tick.
+  try {
+    return await bridgeRequest('startSession', {
+      sim,
+      allowSimRunning: !!(opts && opts.allowSimRunning),
+    });
+  } catch (e) { return { ok: false, error: e.message }; }
 });
 
 ipcMain.handle('bridge:setSignals', async (_, { sim, signals }) => {
@@ -883,6 +903,48 @@ ipcMain.handle('bridge:getSignals', async (_, { sim, ids }) => {
 ipcMain.handle('bridge:endSession', async (_, { sim }) => {
   try { return await bridgeRequest('endSession', { sim }); }
   catch (e) { return { ok: false, error: e.message }; }
+});
+
+// PoKeys USB enumeration. Stateless — no sim, no session lifecycle —
+// fires a one-shot enumerate command on the bridge process. Spawns
+// the bridge if not already running (lazy). Bridge connects/
+// disconnects per call internally so the device isn't held between
+// the editor's clicks of "Detect".
+ipcMain.handle('bridge:enumeratePoKeys', async () => {
+  try { return await bridgeRequest('pokeys.enumerate'); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Test-drive a single PoKeys output (latched). Used by the Mappings
+// tab's per-row Test toggle and the per-group All On / All Off
+// buttons. Bridge connects to the device, writes one bit/channel,
+// disconnects — same connect-per-call model as enumeration so the
+// editor doesn't lock the device between clicks.
+ipcMain.handle('bridge:setPoKeysOutput', async (_, args) => {
+  try { return await bridgeRequest('pokeys.setOutput', args || {}); }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+// Detect whether SimLinkup.exe is currently running on this host.
+// Used by the editor's PoKeys test affordance to decide between two
+// paths:
+//   - SimLinkup running: write to the sim's shared memory (via
+//     bridge:setSignals) so SimLinkup itself drives the relay
+//     through the user's existing mapping chain. No cross-process
+//     fight over the PoKeys USB handle.
+//   - SimLinkup not running: write directly to the device via
+//     bridge:setPoKeysOutput.
+//
+// Delegates to the bridge's system.isSimLinkupRunning command, which
+// uses OpenMutex on a named kernel mutex SimLinkup creates at
+// startup (Local\\SimLinkupRunning). This returns in microseconds.
+// The previous implementation shelled out to `tasklist`, which on
+// machines with AV/Defender hooking process enumeration was taking
+// ~3 seconds per call and showing up as 4 s per-click latency on the
+// PoKeys test buttons.
+ipcMain.handle('isSimLinkupRunning', async () => {
+  try { return await bridgeRequest('system.isSimLinkupRunning'); }
+  catch (e) { return { ok: false, running: false, error: e.message }; }
 });
 
 // Tear down the bridge cleanly on app quit. Best-effort: send shutdown,

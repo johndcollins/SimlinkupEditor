@@ -25,15 +25,6 @@ function renderHardwareConfig() {
     return;
   }
 
-  // PoKeys is split across two driver ids (pokeys_digital, pokeys_pwm)
-  // for kind-mismatch validator purposes, but maps to ONE physical card
-  // and ONE config file. Render the config card under pokeys_digital
-  // when both are declared (or whichever single id is declared if only
-  // one is) so the user sees a single coherent editor instead of two
-  // duplicates with shared state.
-  if (declaredIds.includes('pokeys_pwm') && declaredIds.includes('pokeys_digital')) {
-    declaredIds.splice(declaredIds.indexOf('pokeys_pwm'), 1);
-  }
 
   pane.innerHTML = `
     <div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
@@ -81,9 +72,7 @@ function renderHardwareConfigCard(driverId) {
     card.innerHTML = renderTeensyVectorDrawingCardHtml(decl);
   } else if (driverId === 'niclasmorindts') {
     card.innerHTML = renderNiclasMorinDTSCardHtml(decl);
-  } else if (driverId === 'pokeys_digital' || driverId === 'pokeys_pwm') {
-    // Both PoKeys driver ids render the same card body — they share
-    // `decl` by reference (see parseDriverConfigs / toggleDriver).
+  } else if (driverId === 'pokeys') {
     card.innerHTML = renderPoKeysCardHtml(decl);
   } else {
     card.innerHTML = renderStubDriverCardHtml(driverId, decl);
@@ -1948,12 +1937,12 @@ async function openDriverConfigFile(driverId) {
 //   - PWM outputs: list of {channel} rows. + Add row. Disable channel
 //     options already in use.
 //
-// The card is shared between the `pokeys_digital` and `pokeys_pwm` driver
-// ids — they share `decl` by reference (see parseDriverConfigs +
-// toggleDriver), and renderHardwareConfig dedupes so only one card
-// appears even when both are declared.
+// Single PoKeys card. Renders all three output kinds (digital pins,
+// PWM channels, PoExtBus relay bits) in one editor since they all
+// live on the same physical board and share Identity (Serial, Name,
+// PWM period).
 function renderPoKeysCardHtml(decl) {
-  const meta = DRIVER_META.pokeys_digital;
+  const meta = DRIVER_META.pokeys;
   const devices = decl?.devices || [];
   const n = devices.length;
   const summary = (() => {
@@ -1976,7 +1965,7 @@ function renderPoKeysCardHtml(decl) {
         <div class="hwconfig-card-title">PoKeys (digital pins + PWM)</div>
         <div class="hwconfig-card-sub">${escHtml(summary)}</div>
       </div>
-      <button class="btn-sm" onclick="event.preventDefault(); event.stopPropagation(); openDriverConfigFile('pokeys_digital')">Open in OS editor</button>
+      <button class="btn-sm" onclick="event.preventDefault(); event.stopPropagation(); openDriverConfigFile('pokeys')">Open in OS editor</button>
     </summary>`;
 
   const deviceSections = devices.map((dev, idx) =>
@@ -2002,7 +1991,13 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
     let opts = '';
     for (let p = 1; p <= 55; p++) {
       const used = usedDigitalPins.has(p) && p !== Number(currentPin);
-      opts += `<option value="${p}" ${p === Number(currentPin) ? 'selected' : ''} ${used ? 'disabled' : ''}>${p}${used ? ' (in use)' : ''}</option>`;
+      // Pin 54 is the device reset line. Most users don't want to
+      // touch it, but driving it deliberately CAN be used to issue a
+      // soft reset to a stuck peripheral — we leave it selectable and
+      // flag it in the label so the user knows what they're picking.
+      const isReset = p === 54;
+      const suffix = used ? ' (in use)' : (isReset ? ' (reset — use with care)' : '');
+      opts += `<option value="${p}" ${p === Number(currentPin) ? 'selected' : ''} ${used ? 'disabled' : ''}>${p}${suffix}</option>`;
     }
     return opts;
   };
@@ -2020,7 +2015,28 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
     return opts;
   };
 
-  // Digital outputs list
+  // PoExtBus bits 1..80. The PoKeys vendor tool labels them as
+  // "Device N : letter A..H" — show both forms in the dropdown so
+  // users wiring relays from a vendor-tool reference point can match
+  // up the bit number directly (no off-by-one against the physical
+  // chain).
+  const usedExtBusBits = new Set(
+    (dev.extBusOutputs || []).map(o => Number(o.bit))
+  );
+  const buildExtBusBitOptions = (currentBit) => {
+    let opts = '';
+    for (let b = 1; b <= 80; b++) {
+      const used = usedExtBusBits.has(b) && b !== Number(currentBit);
+      const deviceIdx = Math.floor((b - 1) / 8) + 1; // 1..10
+      const letter = String.fromCharCode(65 + ((b - 1) % 8)); // A..H
+      opts += `<option value="${b}" ${b === Number(currentBit) ? 'selected' : ''} ${used ? 'disabled' : ''}>Device ${deviceIdx} : ${letter} (bit ${b})${used ? ' — in use' : ''}</option>`;
+    }
+    return opts;
+  };
+
+  // Digital outputs list. Name field is optional but surfaces in the
+  // Mappings dropdown — users wiring relays/lamps benefit from
+  // semantic labels ("Gear down lamp") over raw pin numbers.
   const digitalOuts = dev.digitalOutputs || [];
   const digitalRows = digitalOuts.map((o, oi) => `
     <div class="hwconfig-pokeys-row">
@@ -2028,6 +2044,11 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
         <select onchange="setPokeysDigitalField(${idx}, ${oi}, 'pin', this.value)">
           ${buildPinOptions(o.pin)}
         </select>
+      </label>
+      <label class="hwconfig-pokeys-name">Name (optional)
+        <input type="text" value="${escHtml(o.name ?? '')}"
+               placeholder="Gear down lamp"
+               onchange="setPokeysDigitalField(${idx}, ${oi}, 'name', this.value)"/>
       </label>
       <label class="hwconfig-pokeys-invert">
         <input type="checkbox" ${o.invert ? 'checked' : ''}
@@ -2047,9 +2068,37 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
           ${buildPWMChannelOptions(o.channel)}
         </select>
       </label>
+      <label class="hwconfig-pokeys-name">Name (optional)
+        <input type="text" value="${escHtml(o.name ?? '')}"
+               placeholder="Backlight"
+               onchange="setPokeysPWMField(${idx}, ${oi}, 'name', this.value)"/>
+      </label>
       <button class="btn-sm btn-danger" onclick="removePokeysPWMOutput(${idx}, ${oi})">×</button>
     </div>`).join('');
   const allPWMUsed = usedPWMChannels.size >= 6;
+
+  // PoExtBus outputs list — shift-register relay outputs.
+  const extBusOuts = dev.extBusOutputs || [];
+  const extBusRows = extBusOuts.map((o, oi) => `
+    <div class="hwconfig-pokeys-row">
+      <label>Bit
+        <select onchange="setPokeysPoExtBusField(${idx}, ${oi}, 'bit', this.value)">
+          ${buildExtBusBitOptions(o.bit)}
+        </select>
+      </label>
+      <label class="hwconfig-pokeys-name">Name (optional)
+        <input type="text" value="${escHtml(o.name ?? '')}"
+               placeholder="Master caution"
+               onchange="setPokeysPoExtBusField(${idx}, ${oi}, 'name', this.value)"/>
+      </label>
+      <label class="hwconfig-pokeys-invert">
+        <input type="checkbox" ${o.invert ? 'checked' : ''}
+               onchange="setPokeysPoExtBusField(${idx}, ${oi}, 'invert', this.checked)"/>
+        <span>Invert (off by default — relay energises on state=true; tick for active-low wiring)</span>
+      </label>
+      <button class="btn-sm btn-danger" onclick="removePokeysPoExtBusOutput(${idx}, ${oi})">×</button>
+    </div>`).join('');
+  const allExtBusUsed = usedExtBusBits.size >= 80;
 
   return `
     <div class="hwconfig-device-section">
@@ -2060,9 +2109,17 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
       <div class="hwconfig-section-label">Identity</div>
       <div class="hwconfig-board-grid">
         <label>Serial
-          <input type="text" value="${escHtml(String(dev.address ?? ''))}"
-                 placeholder="12345"
-                 onchange="setPokeysField(${idx}, 'address', this.value)"/>
+          <div class="hwconfig-pokeys-serial">
+            <input type="text" value="${escHtml(String(dev.address ?? ''))}"
+                   placeholder="12345"
+                   id="pokeys-serial-${idx}"
+                   onchange="setPokeysField(${idx}, 'address', this.value)"/>
+            <button class="btn-sm" type="button"
+                    onclick="detectPoKeysDevices(${idx})"
+                    title="Scan for plugged-in PoKeys USB devices and pick one to fill in this field. Connects to each device only long enough to read its serial; doesn't hold the connection.">
+              Detect
+            </button>
+          </div>
         </label>
         <label>Name (optional)
           <input type="text" value="${escHtml(String(dev.name ?? ''))}"
@@ -2074,6 +2131,12 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
                  onchange="setPokeysField(${idx}, 'pwmPeriodMicroseconds', this.value)"/>
         </label>
       </div>
+      <label class="hwconfig-pokeys-cpw"
+             title="When ON, the SimLinkup HSM connects to the device for each signal change instead of holding a persistent USB handle. Lets you test outputs from the editor while SimLinkup is running, but adds ~30-80 ms latency per write — not recommended for boards driving continuously-updating PWM/analog channels.">
+        <input type="checkbox" ${dev.connectPerWrite ? 'checked' : ''}
+               onchange="setPokeysField(${idx}, 'connectPerWrite', this.checked)"/>
+        <span>Connect/disconnect per write (slower, but lets other apps share the device)</span>
+      </label>
 
       <div class="hwconfig-section-label">Digital outputs</div>
       ${digitalRows || '<div class="hwconfig-empty-row">No digital outputs declared.</div>'}
@@ -2084,6 +2147,11 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
       ${pwmRows || '<div class="hwconfig-empty-row">No PWM channels declared.</div>'}
       <button class="btn-sm btn-primary" ${allPWMUsed ? 'disabled' : ''}
               onclick="addPokeysPWMOutput(${idx})">+ Add PWM channel</button>
+
+      <div class="hwconfig-section-label" style="margin-top:12px">PoExtBus relay outputs</div>
+      ${extBusRows || '<div class="hwconfig-empty-row">No PoExtBus bits declared.</div>'}
+      <button class="btn-sm btn-primary" ${allExtBusUsed ? 'disabled' : ''}
+              onclick="addPokeysPoExtBusOutput(${idx})">+ Add PoExtBus bit</button>
     </div>`;
 }
 
@@ -2092,7 +2160,137 @@ function renderPoKeysDeviceHtml(dev, idx, total) {
 // the dropdown disabled-state and summary line refresh.
 function pokeysSharedDecl() {
   const p = profiles[activeIdx];
-  return p.drivers?.pokeys_digital || p.drivers?.pokeys_pwm || null;
+  return p.drivers?.pokeys || null;
+}
+
+// Spawn the bridge (if not already running), enumerate plugged-in
+// PoKeys USB devices, and either auto-fill the Serial field with the
+// single detected board OR show a small picker so the user can choose.
+// Bridge connects/disconnects per call internally — no held handles
+// between the editor's clicks of "Detect", so the device stays free
+// for the PoKeys vendor tool / a running SimLinkup / etc.
+async function detectPoKeysDevices(deviceIdx) {
+  const decl = pokeysSharedDecl();
+  if (!decl || !decl.devices?.[deviceIdx]) return;
+  let result;
+  try {
+    result = await window.api.bridge.enumeratePoKeys();
+  } catch (e) {
+    toast(`PoKeys detection failed: ${e?.message || e}`);
+    return;
+  }
+  if (!result?.ok) {
+    toast(`PoKeys detection failed: ${result?.error || 'unknown error'}`);
+    return;
+  }
+  const devices = result.devices || [];
+  if (devices.length === 0) {
+    toast('No PoKeys devices detected on USB. Make sure the board is plugged in and not currently in use by another app.');
+    return;
+  }
+  // Always show the picker, even for a single device. Auto-filling
+  // hides what we found (firmware version, hardware name, userId)
+  // which is exactly the info the user needs to confirm they're
+  // pointing at the right board. One extra click is fine — the
+  // picker also lets the user re-Detect later to switch boards.
+  const usedSerials = new Set(
+    decl.devices
+      .filter((_, i) => i !== deviceIdx)
+      .map(d => String(d.address))
+  );
+  showPoKeysDetectModal(deviceIdx, devices, usedSerials);
+}
+
+function _applyPokeysSerial(deviceIdx, detected) {
+  const decl = pokeysSharedDecl();
+  const dev = decl?.devices?.[deviceIdx];
+  if (!dev) return;
+  // Refuse if the new serial would orphan wired channels on the
+  // current address. The user has to unwire first — same protection
+  // setPokeysField applies for typed serial changes.
+  const oldAddr = dev.address;
+  const newAddr = String(detected.serial);
+  if (oldAddr && oldAddr !== newAddr) {
+    const p = profiles[activeIdx];
+    const wired = p.chain.edges.filter(e =>
+      e.dstDriver === 'pokeys' &&
+      String(e.dstDriverDevice) === String(oldAddr)
+    ).length;
+    if (wired > 0) {
+      toast(`Cannot change serial from ${oldAddr} to ${newAddr}: ${wired} channel${wired === 1 ? ' is' : 's are'} wired to ${oldAddr}. Unwire first.`);
+      return;
+    }
+  }
+  dev.address = newAddr;
+  // Also auto-fill the Name if empty and the device reports one — the
+  // user can rename later but this saves a step for the common case.
+  if (!dev.name && detected.name) {
+    dev.name = detected.name;
+  }
+  toast(`Filled Serial: ${newAddr}${detected.hwName ? ` (${detected.hwName})` : ''}`);
+  renderHardwareConfig();
+}
+
+// Tiny inline modal for picking among multiple detected PoKeys
+// boards. No fancy transitions — just a centred panel with a list of
+// buttons. Closes when the user clicks a row, the backdrop, or the
+// Cancel button. Built ad-hoc here rather than reusing the disclaimer
+// modal pattern because this is a one-off; if more pickers land in
+// the future we'll factor a shared component.
+function showPoKeysDetectModal(deviceIdx, detected, usedSerials) {
+  const existing = document.getElementById('pokeysDetectModal');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'pokeysDetectModal';
+  overlay.className = 'pokeys-detect-overlay';
+  const rows = detected.map((d, i) => {
+    const used = usedSerials.has(String(d.serial));
+    // Connection type ("usb" / "network") capitalises in the picker
+    // so the user can spot at a glance which transport each board is
+    // on — relevant when both USB and Ethernet PoKeys are detected.
+    const connLabel = d.connection === 'network' ? 'Ethernet' : (d.connection === 'usb' ? 'USB' : '');
+    const subtitle = [
+      connLabel,
+      d.hwName,
+      d.firmware ? `fw ${d.firmware}` : '',
+      d.userId ? `userId ${d.userId}` : '',
+      used ? 'already used in this profile' : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <button class="pokeys-detect-row" data-detect-idx="${i}" ${used ? 'disabled' : ''}>
+        <div class="pokeys-detect-row-serial">${d.serial}</div>
+        <div class="pokeys-detect-row-meta">${escHtml(d.name || '(unnamed)')}${subtitle ? ` — ${escHtml(subtitle)}` : ''}</div>
+      </button>`;
+  }).join('');
+  overlay.innerHTML = `
+    <div class="pokeys-detect-modal" onclick="event.stopPropagation()">
+      <div class="pokeys-detect-title">Detected PoKeys devices</div>
+      <div class="pokeys-detect-help">
+        Click a board to fill in its serial number. Boards already used
+        elsewhere in this profile are disabled so you don't double-up
+        by accident.
+      </div>
+      <div class="pokeys-detect-list">${rows}</div>
+      <div class="pokeys-detect-actions">
+        <button class="btn-sm" id="pokeysDetectCancel">Cancel</button>
+      </div>
+    </div>`;
+  // Click on any row → apply, close. Click on backdrop → close.
+  overlay.addEventListener('click', () => overlay.remove());
+  overlay.querySelector('#pokeysDetectCancel').addEventListener('click', (e) => {
+    e.stopPropagation();
+    overlay.remove();
+  });
+  for (const btn of overlay.querySelectorAll('button[data-detect-idx]')) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const i = parseInt(btn.getAttribute('data-detect-idx'), 10);
+      if (!Number.isFinite(i)) return;
+      _applyPokeysSerial(deviceIdx, detected[i]);
+      overlay.remove();
+    });
+  }
+  document.body.appendChild(overlay);
 }
 
 function setPokeysField(deviceIdx, field, value) {
@@ -2103,11 +2301,11 @@ function setPokeysField(deviceIdx, field, value) {
     const oldAddr = dev.address;
     const trimmed = String(value).trim();
     if (trimmed && trimmed !== oldAddr) {
-      // Refuse if anything is wired to either driver-id-flavour with the
-      // current serial — changing serial would orphan those edges.
+      // Refuse if anything is wired to this serial — changing it
+      // would orphan those edges.
       const p = profiles[activeIdx];
       const wired = p.chain.edges.filter(e =>
-        (e.dstDriver === 'pokeys_digital' || e.dstDriver === 'pokeys_pwm') &&
+        e.dstDriver === 'pokeys' &&
         String(e.dstDriverDevice) === String(oldAddr)
       ).length;
       if (wired > 0) {
@@ -2128,6 +2326,10 @@ function setPokeysField(deviceIdx, field, value) {
     if (Number.isFinite(n) && n > 0) dev.pwmPeriodMicroseconds = n;
     return;
   }
+  if (field === 'connectPerWrite') {
+    dev.connectPerWrite = !!value;
+    return;
+  }
 }
 
 function addPokeysDigitalOutput(deviceIdx) {
@@ -2144,7 +2346,8 @@ function addPokeysDigitalOutput(deviceIdx) {
     toast('All 55 digital pins are already declared on this board.');
     return;
   }
-  dev.digitalOutputs.push({ pin, invert: true });
+  dev.digitalOutputs.push(poKeysDefaultDigitalOutput());
+  dev.digitalOutputs[dev.digitalOutputs.length - 1].pin = pin;
   renderHardwareConfig();
 }
 
@@ -2158,7 +2361,7 @@ function removePokeysDigitalOutput(deviceIdx, outIdx) {
   // orphan an edge.
   const p = profiles[activeIdx];
   const wired = p.chain.edges.filter(e =>
-    e.dstDriver === 'pokeys_digital' &&
+    e.dstDriver === 'pokeys' &&
     String(e.dstDriverDevice) === String(dev.address) &&
     e.dstDriverChannel === `DIGITAL_PIN[${out.pin}]`
   ).length;
@@ -2183,7 +2386,7 @@ function setPokeysDigitalField(deviceIdx, outIdx, field, value) {
       const p = profiles[activeIdx];
       const dev = decl.devices[deviceIdx];
       const wired = p.chain.edges.filter(e =>
-        e.dstDriver === 'pokeys_digital' &&
+        e.dstDriver === 'pokeys' &&
         String(e.dstDriverDevice) === String(dev.address) &&
         e.dstDriverChannel === `DIGITAL_PIN[${out.pin}]`
       ).length;
@@ -2201,6 +2404,10 @@ function setPokeysDigitalField(deviceIdx, outIdx, field, value) {
     out.invert = !!value;
     return;
   }
+  if (field === 'name') {
+    out.name = String(value);
+    return;
+  }
 }
 
 function addPokeysPWMOutput(deviceIdx) {
@@ -2215,7 +2422,8 @@ function addPokeysPWMOutput(deviceIdx) {
     toast('All 6 PWM channels are already declared on this board.');
     return;
   }
-  dev.pwmOutputs.push({ channel });
+  dev.pwmOutputs.push(poKeysDefaultPWMOutput());
+  dev.pwmOutputs[dev.pwmOutputs.length - 1].channel = channel;
   renderHardwareConfig();
 }
 
@@ -2227,7 +2435,7 @@ function removePokeysPWMOutput(deviceIdx, outIdx) {
   if (!out) return;
   const p = profiles[activeIdx];
   const wired = p.chain.edges.filter(e =>
-    e.dstDriver === 'pokeys_pwm' &&
+    e.dstDriver === 'pokeys' &&
     String(e.dstDriverDevice) === String(dev.address) &&
     e.dstDriverChannel === `PWM[${out.channel}]`
   ).length;
@@ -2250,7 +2458,7 @@ function setPokeysPWMField(deviceIdx, outIdx, field, value) {
       const p = profiles[activeIdx];
       const dev = decl.devices[deviceIdx];
       const wired = p.chain.edges.filter(e =>
-        e.dstDriver === 'pokeys_pwm' &&
+        e.dstDriver === 'pokeys' &&
         String(e.dstDriverDevice) === String(dev.address) &&
         e.dstDriverChannel === `PWM[${out.channel}]`
       ).length;
@@ -2262,6 +2470,89 @@ function setPokeysPWMField(deviceIdx, outIdx, field, value) {
       out.channel = newCh;
       renderHardwareConfig();
     }
+    return;
+  }
+  if (field === 'name') {
+    out.name = String(value);
+    return;
+  }
+}
+
+// ── PoExtBus mutators ────────────────────────────────────────────────────────
+//
+// Same shape as the digital-pin mutators. PoExtBus bits are digital
+// outputs under the same `pokeys` driver id, distinguished from GPIO
+// pins only by the channel string format `PoExtBus[N]` vs
+// `DIGITAL_PIN[N]`. Refuse bit changes that would orphan a wired edge.
+function addPokeysPoExtBusOutput(deviceIdx) {
+  const decl = pokeysSharedDecl();
+  const dev = decl?.devices?.[deviceIdx];
+  if (!dev) return;
+  if (!Array.isArray(dev.extBusOutputs)) dev.extBusOutputs = [];
+  const used = new Set(dev.extBusOutputs.map(o => Number(o.bit)));
+  let bit = 1;
+  while (bit <= 80 && used.has(bit)) bit++;
+  if (bit > 80) {
+    toast('All 80 PoExtBus bits are already declared on this board.');
+    return;
+  }
+  dev.extBusOutputs.push(poKeysDefaultPoExtBusOutput());
+  dev.extBusOutputs[dev.extBusOutputs.length - 1].bit = bit;
+  renderHardwareConfig();
+}
+
+function removePokeysPoExtBusOutput(deviceIdx, outIdx) {
+  const decl = pokeysSharedDecl();
+  const dev = decl?.devices?.[deviceIdx];
+  if (!dev || !Array.isArray(dev.extBusOutputs)) return;
+  const out = dev.extBusOutputs[outIdx];
+  if (!out) return;
+  const p = profiles[activeIdx];
+  const wired = p.chain.edges.filter(e =>
+    e.dstDriver === 'pokeys' &&
+    String(e.dstDriverDevice) === String(dev.address) &&
+    e.dstDriverChannel === `PoExtBus[${out.bit}]`
+  ).length;
+  if (wired > 0) {
+    toast(`Cannot remove PoExtBus bit ${out.bit}: ${wired} channel${wired === 1 ? ' is' : 's are'} wired to it. Unwire first.`);
+    return;
+  }
+  dev.extBusOutputs.splice(outIdx, 1);
+  renderHardwareConfig();
+}
+
+function setPokeysPoExtBusField(deviceIdx, outIdx, field, value) {
+  const decl = pokeysSharedDecl();
+  const out = decl?.devices?.[deviceIdx]?.extBusOutputs?.[outIdx];
+  if (!out) return;
+  if (field === 'bit') {
+    const newBit = parseInt(value, 10);
+    if (newBit < 1 || newBit > 80) return;
+    if (out.bit !== newBit) {
+      const p = profiles[activeIdx];
+      const dev = decl.devices[deviceIdx];
+      const wired = p.chain.edges.filter(e =>
+        e.dstDriver === 'pokeys' &&
+        String(e.dstDriverDevice) === String(dev.address) &&
+        e.dstDriverChannel === `PoExtBus[${out.bit}]`
+      ).length;
+      if (wired > 0) {
+        toast(`Cannot change PoExtBus bit ${out.bit}: ${wired} channel${wired === 1 ? ' is' : 's are'} wired to it. Unwire first.`);
+        renderHardwareConfig();
+        return;
+      }
+      out.bit = newBit;
+      renderHardwareConfig();
+    }
+    return;
+  }
+  if (field === 'invert') {
+    out.invert = !!value;
+    return;
+  }
+  if (field === 'name') {
+    out.name = String(value);
+    return;
   }
 }
 

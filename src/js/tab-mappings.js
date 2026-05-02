@@ -25,7 +25,7 @@
 // If the driver isn't declared in the profile at all, the dropdown won't be
 // rendered for that driver — but we still return the static fallback so the
 // raw destination ID can be parsed at load time.
-function effectiveDriverHint(driver) {
+function effectiveDriverHint(driver, currentDevice) {
   const base = DRIVER_HINTS[driver];
   if (!base) return null;
   const profile = activeIdx !== null ? profiles[activeIdx] : null;
@@ -37,13 +37,78 @@ function effectiveDriverHint(driver) {
   if (shape === 'address') {
     values = decl.devices.map(d => d.address).filter(a => a != null && a !== '');
   } else if (shape === 'count') {
-    values = decl.devices.map((_, i) => i);
+    // PoKeys is count-shape for declaration but addressed by serial
+    // at runtime — surface the serials as the dropdown values so the
+    // signal ids and C# HSM lookup line up. Other count-shape drivers
+    // (AnalogDevices) use position index.
+    if (driver === 'pokeys') {
+      values = decl.devices.map(d => d.address).filter(a => a != null && a !== '');
+    } else {
+      values = decl.devices.map((_, i) => i);
+    }
   } else {
     // 'single' — no device picker needed; return whatever's in the base hint.
     return base;
   }
   if (!values.length) return base;
-  return { ...base, devices: values };
+
+  // PoKeys-specific: surface the user-given Name in the Board
+  // dropdown (e.g. "cockpit-left") instead of the raw serial. The
+  // option's `value` stays the serial — that's what edges and signal
+  // ids reference — but the display text uses the friendly name with
+  // a serial fallback so unnamed boards still render. The shared
+  // renderer (~30 lines below) calls `deviceLabel(value)` per option.
+  let deviceLabel;
+  if (driver === 'pokeys') {
+    deviceLabel = (serial) => {
+      const dev = decl.devices.find(d => String(d.address) === String(serial));
+      const name = String(dev?.name || '').trim();
+      return name ? `${name} (${serial})` : String(serial);
+    };
+  }
+
+  // PoKeys-specific: build a per-device, per-kind channelGroups list
+  // from the user's declared outputs. The board exposes 141 possible
+  // outputs (55 GPIO + 6 PWM + 80 PoExtBus); showing all of them in
+  // the dropdown would be unusable. Filtering to declared-only also
+  // gives users a chance to add Names in Hardware Config that surface
+  // here as labels. Per-device because picking Board A then seeing
+  // Board B's outputs would be confusing in multi-board setups.
+  if (driver === 'pokeys') {
+    const targetSerial = currentDevice != null && currentDevice !== ''
+      ? String(currentDevice)
+      : (values[0] != null ? String(values[0]) : null);
+    const dev = decl.devices.find(d => String(d.address) === targetSerial);
+    if (dev) {
+      const labelOf = (kind, primary, fallback) =>
+        (typeof primary === 'string' && primary.trim()) ? `${primary.trim()} (${fallback})` : fallback;
+      const digitals = (dev.digitalOutputs || []).map(o => ({
+        value: `DIGITAL_PIN[${o.pin}]`,
+        label: labelOf('digital', o.name, `DIGITAL_PIN[${o.pin}]`),
+      }));
+      const pwms = (dev.pwmOutputs || []).map(o => ({
+        value: `PWM[${o.channel}]`,
+        // Surface the physical pin too so the dropdown matches the
+        // Hardware Config card's PWM channel labels exactly.
+        label: labelOf('pwm', o.name, `PWM${o.channel} (pin ${16 + o.channel})`),
+      }));
+      const extBus = (dev.extBusOutputs || []).map(o => {
+        const deviceIdx = Math.floor((o.bit - 1) / 8) + 1;
+        const letter = String.fromCharCode(65 + ((o.bit - 1) % 8));
+        return {
+          value: `PoExtBus[${o.bit}]`,
+          label: labelOf('extbus', o.name, `Device ${deviceIdx} : ${letter} (bit ${o.bit})`),
+        };
+      });
+      const channelGroups = [];
+      if (digitals.length) channelGroups.push({ label: 'Digital pins',     channels: digitals });
+      if (pwms.length)     channelGroups.push({ label: 'PWM channels',     channels: pwms });
+      if (extBus.length)   channelGroups.push({ label: 'PoExtBus relays',  channels: extBus });
+      return { ...base, devices: values, channelGroups, deviceLabel };
+    }
+  }
+
+  return { ...base, devices: values, deviceLabel };
 }
 
 // Build the source <option> markup for the active profile's Mappings tab.
@@ -265,8 +330,11 @@ function renderMappings() {
   if (!pane) return;
   const p = profiles[activeIdx];
 
-  if (p.instruments.length === 0) {
-    pane.innerHTML = '<div class="empty">Add an instrument from the Instruments tab first, then wire its inputs and outputs here.</div>';
+  // Show the empty-state hint when there's literally nothing wirable.
+  // A profile with declared direct groups but no instruments is still
+  // wirable — render the direct cards.
+  if (p.instruments.length === 0 && (p.directGroups || []).length === 0) {
+    pane.innerHTML = '<div class="empty">Add an instrument from the Instruments tab — or a direct mapping group from the Direct tab — to start wiring.</div>';
     return;
   }
 
@@ -286,14 +354,83 @@ function renderMappings() {
 
   _channelConflicts = buildChannelConflictMap(p.chain.edges);
 
-  // One card per active instrument.
-  let html = '<div class="mappings-toolbar">' +
-             '<div class="mappings-toolbar-text">Wire each gauge HSM\'s inputs from BMS and its outputs to your hardware. Resolver pairs are routed as a unit — the sin and cos channels must use the same driver but can land on any two channels.</div>' +
-             '<div class="mappings-toolbar-actions">' +
-               '<button class="btn-sm" onclick="setAllGaugeCardsOpen(true)">Expand all</button>' +
-               '<button class="btn-sm" onclick="setAllGaugeCardsOpen(false)">Collapse all</button>' +
-             '</div>' +
-             '</div>';
+  // Build the filtered card list. Each entry is { kind: 'gauge'|'direct',
+  // status, title, render: () => HTMLElement }. The filter bar narrows
+  // by search (substring of title) / status / kind, then we render
+  // whatever survives. Cards are still rendered as full DOM (not
+  // markup strings) because the gauge-card / direct-group-card
+  // builders return Elements that need post-render select-value
+  // wiring.
+  const cards = [];
+  for (const pn of p.instruments) {
+    const inst = INSTRUMENTS.find(i => i.pn === pn);
+    if (!inst) continue;
+    const view = p.chain.instruments.find(v => v.pn === pn) || { inputs: [], outputGroups: [] };
+    const stats = computeGaugeCompletion(inst, p);
+    const status = stats.broken > 0 ? 'broken'
+      : (stats.complete ? 'complete'
+        : ((stats.inputs.wired + stats.outputs.wired) === 0 ? 'none' : 'partial'));
+    cards.push({
+      kind: 'gauge',
+      status,
+      title: `${inst.name || ''} ${inst.pn || ''}`.toLowerCase(),
+      render: () => renderInstrumentCard(inst, view),
+    });
+  }
+  for (let gi = 0; gi < (p.directGroups || []).length; gi++) {
+    const group = p.directGroups[gi];
+    const inputs = group.inputs || [];
+    const groupEdges = (p.chain.edges || []).filter(e =>
+      e.stage === 'direct' && e.directGroupId === group.id
+    );
+    const wiredCount = inputs.filter(inp => {
+      if (!inp.sourceSignalId) return false;
+      const e = groupEdges.find(x => x.directInputId === inp.id);
+      return !!(e && e.dst);
+    }).length;
+    const total = inputs.length;
+    const status = total === 0 ? 'none'
+      : (wiredCount === 0 ? 'none'
+        : (wiredCount === total ? 'complete' : 'partial'));
+    cards.push({
+      kind: 'direct',
+      status,
+      title: (group.name || '').toLowerCase(),
+      render: () => renderDirectGroupMappingCard(group, gi),
+    });
+  }
+  const filter = mapSearch.trim().toLowerCase();
+  const filteredCards = cards.filter(c => {
+    if (mapTypeFilter !== 'all' && c.kind !== mapTypeFilter) return false;
+    if (mapStatusFilter !== 'all' && c.status !== mapStatusFilter) return false;
+    if (filter && !c.title.includes(filter)) return false;
+    return true;
+  });
+
+  // Toolbar now has a filter bar matching the Instruments tab pattern.
+  // The descriptive paragraph that used to live up here moved to a
+  // smaller hint below the filter bar so the filter controls have
+  // priority real estate.
+  let html = `
+    <div class="filter-bar">
+      <input type="search" placeholder="Search cards…" value="${escHtml(mapSearch)}"
+             oninput="mapSearch=this.value;renderMappings()"/>
+      <select onchange="mapTypeFilter=this.value;renderMappings()">
+        <option value="all"    ${mapTypeFilter==='all'?'selected':''}>All types</option>
+        <option value="gauge"  ${mapTypeFilter==='gauge'?'selected':''}>Gauges</option>
+        <option value="direct" ${mapTypeFilter==='direct'?'selected':''}>Direct groups</option>
+      </select>
+      <select onchange="mapStatusFilter=this.value;renderMappings()">
+        <option value="all"      ${mapStatusFilter==='all'?'selected':''}>All statuses</option>
+        <option value="complete" ${mapStatusFilter==='complete'?'selected':''}>Fully wired</option>
+        <option value="partial"  ${mapStatusFilter==='partial'?'selected':''}>Partially wired</option>
+        <option value="none"     ${mapStatusFilter==='none'?'selected':''}>Not wired</option>
+        <option value="broken"   ${mapStatusFilter==='broken'?'selected':''}>Broken</option>
+      </select>
+      <span style="font-size:11px;color:var(--text-secondary)">${filteredCards.length} of ${cards.length} card${cards.length!==1?'s':''}</span>
+      <button class="btn-sm" onclick="setAllGaugeCardsOpen(true)">Expand all</button>
+      <button class="btn-sm" onclick="setAllGaugeCardsOpen(false)">Collapse all</button>
+    </div>`;
   if (noSimSupport) {
     const brokenSuffix = brokenCount > 0
       ? ` This will fix <strong>${brokenCount}</strong> mapping${brokenCount === 1 ? '' : 's'} that currently reference unknown signals.`
@@ -307,11 +444,14 @@ function renderMappings() {
   pane.innerHTML = html;
   const container = document.getElementById('mappingCards');
 
-  for (const pn of p.instruments) {
-    const inst = INSTRUMENTS.find(i => i.pn === pn);
-    if (!inst) continue;  // unknown PN — skip for now (could render a raw section)
-    const view = p.chain.instruments.find(v => v.pn === pn) || { inputs: [], outputGroups: [] };
-    container.appendChild(renderInstrumentCard(inst, view));
+  if (filteredCards.length === 0) {
+    container.innerHTML = cards.length === 0
+      ? ''
+      : '<div class="empty">No cards match the current filter.</div>';
+    return;
+  }
+  for (const c of filteredCards) {
+    container.appendChild(c.render());
   }
 }
 
@@ -548,7 +688,9 @@ function renderOutputChannelRow(inst, group, portTpl) {
   const p = profiles[activeIdx];
   const edge = p.chain.edges.find(e => e.stage === 2 && e.srcGaugePn === inst.pn && e.srcGaugePort === portTpl.port);
   const driver = edge?.dstDriver || '';
-  const hint = driver ? effectiveDriverHint(driver) : null;
+  // Pass the currently-selected device so PoKeys can scope its
+  // channel-group list to that board's declared outputs.
+  const hint = driver ? effectiveDriverHint(driver, edge?.dstDriverDevice) : null;
   const skipped = isPortSkipped(inst.pn, portTpl.port);
 
   // Driver dropdown — only declared drivers are selectable. Undeclared ones
@@ -570,19 +712,56 @@ function renderOutputChannelRow(inst, group, portTpl) {
   // Device dropdown — depends on driver
   let deviceOpts = '<option value="">—</option>';
   if (hint && hint.devices) {
-    deviceOpts += hint.devices.map(d => `<option value="${escHtml(String(d))}">${escHtml(String(d))}</option>`).join('');
+    deviceOpts += hint.devices.map(d => {
+      const label = (typeof hint.deviceLabel === 'function')
+        ? hint.deviceLabel(d)
+        : String(d);
+      return `<option value="${escHtml(String(d))}">${escHtml(label)}</option>`;
+    }).join('');
   }
 
-  // Channel dropdown — depends on driver
+  // Channel dropdown — depends on driver. Three precedence levels:
+  //   1. channelGroups (per-driver, kind-grouped via <optgroup>) — used
+  //      by PoKeys where users declare named outputs in three kinds.
+  //   2. channels (flat list of strings) — most drivers.
+  //   3. channelCount + formatChannel (numeric range) — AnalogDevices.
+  // If the current edge points at a channel that's NOT in the dropdown
+  // (e.g. user removed the declaration in Hardware Config but never
+  // un-wired the edge), append it as an extra disabled option so the
+  // user sees what's broken instead of the dropdown silently snapping
+  // to "—".
   let channelOpts = '<option value="">—</option>';
+  let channelInList = false;
+  const currentChannel = edge?.dstDriverChannel ?? '';
   if (hint) {
-    if (hint.channels) {
-      channelOpts += hint.channels.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+    if (Array.isArray(hint.channelGroups) && hint.channelGroups.length) {
+      for (const grp of hint.channelGroups) {
+        channelOpts += `<optgroup label="${escHtml(grp.label)}">`;
+        for (const c of grp.channels) {
+          const v = typeof c === 'string' ? c : c.value;
+          const lbl = typeof c === 'string' ? c : (c.label || c.value);
+          if (v === currentChannel) channelInList = true;
+          channelOpts += `<option value="${escHtml(v)}">${escHtml(lbl)}</option>`;
+        }
+        channelOpts += '</optgroup>';
+      }
+    } else if (hint.channels) {
+      for (const c of hint.channels) {
+        if (c === currentChannel) channelInList = true;
+        channelOpts += `<option value="${escHtml(c)}">${escHtml(c)}</option>`;
+      }
     } else if (hint.channelCount) {
       for (let c = 0; c < hint.channelCount; c++) {
+        if (String(c) === String(currentChannel)) channelInList = true;
         channelOpts += `<option value="${c}">${hint.formatChannel(c)}</option>`;
       }
     }
+  }
+  if (currentChannel && !channelInList) {
+    // Edge points at a channel the dropdown doesn't surface (likely
+    // because the user removed the declaration). Show it as a stale
+    // option so they can see and fix the orphaned wiring.
+    channelOpts += `<option value="${escHtml(currentChannel)}" selected>${escHtml(currentChannel)} — not declared</option>`;
   }
 
   const roleLabel = portTpl.role === 'sin' ? 'sin' : portTpl.role === 'cos' ? 'cos' : '';
@@ -619,12 +798,12 @@ function renderOutputChannelRow(inst, group, portTpl) {
   // are treated as 'unknown' and skipped.
   let kindMismatchHtml = '';
   if (!skipped && edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
-    const driverKind = DRIVER_CHANNEL_KIND[edge.dstDriver];
+    const driverKind = getChannelKind(edge.dstDriver, edge.dstDriverChannel);
     if (driverKind && portTpl.kind && driverKind !== portTpl.kind) {
       rowClass += ' map-channel-row-conflict';
       const portKindLabel = portTpl.kind === 'digital' ? 'digital' : 'analog';
       const driverKindLabel = driverKind === 'digital' ? 'digital' : 'analog';
-      const tooltip = `Gauge port "${portTpl.port}" is ${portKindLabel}, but ${edge.dstDriver} channels are ${driverKindLabel}. SimLinkup will crash at runtime trying to cast a ${portKindLabel} signal to a ${driverKindLabel} one. Pick a ${portKindLabel}-capable driver instead.`;
+      const tooltip = `Gauge port "${portTpl.port}" is ${portKindLabel}, but the selected ${edge.dstDriver} channel is ${driverKindLabel}. SimLinkup will crash at runtime trying to cast a ${portKindLabel} signal to a ${driverKindLabel} one. Pick a ${portKindLabel}-capable channel instead.`;
       kindMismatchHtml = `<div class="map-channel-conflict" title="${escHtml(tooltip)}">⚠ kind mismatch — ${escHtml(portKindLabel)} port wired to ${escHtml(driverKindLabel)} channel</div>`;
     }
   }
@@ -669,4 +848,640 @@ function renderOutputChannelRow(inst, group, portTpl) {
     </div>
     ${conflictHtml}
     ${kindMismatchHtml}`;
+}
+
+// ── Direct group rendering ──────────────────────────────────────────────────
+//
+// One card per direct mapping group declared in the Direct tab. Each
+// row inside the card is sim-source → driver-output, with no gauge in
+// between. Reuses the channel-options/conflict/kind-mismatch logic
+// from the gauge output rows where it applies, but the row layout is
+// simpler (no role/port columns — every row is one input directly).
+
+function renderDirectGroupMappingCard(group, groupIdx) {
+  const card = document.createElement('details');
+  card.className = 'instrument-card';
+  card.dataset.directGroupId = group.id;
+  const p = profiles[activeIdx];
+  if (_mappingsOpen.has(`${p.name}|direct:${group.id}`)) card.open = true;
+  card.addEventListener('toggle', () => {
+    const key = `${p.name}|direct:${group.id}`;
+    if (card.open) _mappingsOpen.add(key); else _mappingsOpen.delete(key);
+  });
+
+  const inputs = group.inputs || [];
+  const groupEdges = (p.chain.edges || []).filter(e =>
+    e.stage === 'direct' && e.directGroupId === group.id
+  );
+  // "Wired" here means the destination is set. The source is picked
+  // in the Direct tab; without a source the row's src is empty and
+  // nothing routes — but if the user has picked a destination on the
+  // Mappings tab and forgotten to come back to the Direct tab, that's
+  // a half-wired state and we count it as not yet complete. Only
+  // (sourceSignalId AND dst) counts as fully wired.
+  const wiredCount = inputs.filter(inp => {
+    if (!inp.sourceSignalId) return false;
+    const e = groupEdges.find(x => x.directInputId === inp.id);
+    return !!(e && e.dst);
+  }).length;
+  const total = inputs.length;
+  const status = total === 0
+    ? 'empty'
+    : (wiredCount === 0 ? 'none'
+      : (wiredCount === total ? 'complete' : 'partial'));
+  const pillText = total === 0 ? '—' : (wiredCount === total ? `${wiredCount}/${total} ✓` : `${wiredCount}/${total}`);
+  const pillTitle = total === 0 ? 'No inputs declared in the Direct tab.' : `${wiredCount} of ${total} input${total === 1 ? '' : 's'} wired`;
+
+  const rowsHtml = inputs.length
+    ? inputs.map(inp => renderDirectMappingRow(group, inp)).join('')
+    : `<div class="empty" style="padding:14px">No inputs declared yet. Add them in the <strong>Direct</strong> tab.</div>`;
+
+  const simLabel = (() => {
+    const ss = SIM_SUPPORTS.find(s => s.id === group.simId);
+    return ss ? ss.label : (group.simId || '(no sim)');
+  })();
+
+  // Per-group "All" test toggle — same green-on/grey-off pattern as
+  // the per-row buttons. Rendered only when at least one row in the
+  // group has a PoKeys destination wired. Tracks state in
+  // _pokeysTestState under a synthetic group key so the toggle
+  // visibly latches across re-renders. The "all" state is computed
+  // from per-output cached states: if EVERY wired output is ON, the
+  // group toggle reads ON; otherwise it reads OFF (clicking it then
+  // sets every output ON, regardless of mixed prior state). Mirrors
+  // how a real "ALL" master switch works on a panel.
+  const pokeysTaskList = _pokeysGroupTaskList(group);
+  const hasPokeysDestinations = pokeysTaskList.length > 0;
+  const allOn = hasPokeysDestinations && pokeysTaskList.every(t => {
+    const cur = _pokeysTestState.get(_pokeysTestKey(t.serial, t.kind, t.index));
+    if (t.kind === 'pwm') return typeof cur === 'number' && cur > 0;
+    return cur === 1 || cur === true;
+  });
+  const allTestHtml = hasPokeysDestinations
+    ? `<div class="map-direct-test-toolbar">
+         <button class="map-test-toggle ${allOn ? 'on' : 'off'}"
+                 onclick="onAllPoKeysTest('${escHtml(group.id)}', ${!allOn})"
+                 title="Latch every wired PoKeys output in this group ${allOn ? 'OFF' : 'ON'}. Currently: ${allOn ? 'all ON' : 'mixed/all OFF'}.">
+           ALL ${allOn ? 'ON' : 'OFF'}
+         </button>
+       </div>`
+    : '';
+
+  card.innerHTML = `
+    <summary class="instrument-card-head instrument-card-head-${status}">
+      <span class="instrument-card-chevron" aria-hidden="true">▸</span>
+      <div class="instrument-card-headline">
+        <div class="instrument-card-title">${escHtml(group.name || '(unnamed direct group)')}</div>
+        <div class="instrument-card-pn">Direct mapping · ${escHtml(simLabel)}</div>
+      </div>
+      <span class="completion-pill completion-pill-${status}" title="${escHtml(pillTitle)}">${escHtml(pillText)}</span>
+    </summary>
+    <div class="map-section-head">Direct routes (sim → hardware)</div>
+    ${allTestHtml}
+    ${rowsHtml}
+  `;
+
+  // Wire up dropdown values that the template can't safely set
+  // inline (innerHTML attribute injection of selected= would clash
+  // with the optgroup-based options). For each row, set the
+  // driver/device/channel selects from the edge's
+  // dstDriver/Device/Channel. Source is pinned in the Direct tab
+  // and shown as a read-only label in the row, so no source select
+  // to wire here.
+  for (const inp of inputs) {
+    const edge = groupEdges.find(e => e.directInputId === inp.id);
+    const drvSel = card.querySelector(`select[data-direct-driver="${inp.id}"]`);
+    if (drvSel) setSelectValue(drvSel, edge?.dstDriver || '');
+    const devSel = card.querySelector(`select[data-direct-device="${inp.id}"]`);
+    if (devSel) setSelectValue(devSel, edge?.dstDriverDevice ?? '');
+    const chSel = card.querySelector(`select[data-direct-channel="${inp.id}"]`);
+    if (chSel) setSelectValue(chSel, edge?.dstDriverChannel ?? '');
+  }
+
+  return card;
+}
+
+function renderDirectMappingRow(group, input) {
+  const p = profiles[activeIdx];
+  const edge = (p.chain.edges || []).find(e =>
+    e.stage === 'direct' && e.directGroupId === group.id && e.directInputId === input.id
+  );
+  const driver = edge?.dstDriver || '';
+  const hint = driver ? effectiveDriverHint(driver, edge?.dstDriverDevice) : null;
+
+  // Source label — derived from the input's chosen sim signal in the
+  // Direct tab. Read-only here; the user picks/changes it on that tab.
+  // Falls back to "(no source — pick one in the Direct tab)" so an
+  // unsourced row tells the user where to fix it.
+  const sourceLabel = (() => {
+    if (!input.sourceSignalId) return '(no source — pick one in the Direct tab)';
+    const signal = (SIM_SIGNALS[group.simId]?.scalar || []).find(s => s.id === input.sourceSignalId);
+    return signal?.label || input.sourceSignalId;
+  })();
+  const sourceMissing = !!(input.sourceSignalId && !(SIM_SIGNALS[group.simId]?.scalar || []).find(s => s.id === input.sourceSignalId));
+
+  const declaredDrivers = new Set(Object.keys(p.drivers || {}));
+  const driverOpts = DRIVER_OPTIONS.map(o => {
+    if (!o.value) return `<option value="">${escHtml(o.label)}</option>`;
+    const isDeclared = declaredDrivers.has(o.value);
+    const isCurrent = o.value === driver;
+    if (isDeclared || isCurrent) {
+      return `<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`;
+    }
+    return `<option value="${escHtml(o.value)}" disabled>${escHtml(o.label)} — add in Hardware tab</option>`;
+  }).join('');
+
+  let deviceOpts = '<option value="">—</option>';
+  if (hint && hint.devices) {
+    deviceOpts += hint.devices.map(d => {
+      const label = (typeof hint.deviceLabel === 'function')
+        ? hint.deviceLabel(d)
+        : String(d);
+      return `<option value="${escHtml(String(d))}">${escHtml(label)}</option>`;
+    }).join('');
+  }
+
+  // Channel dropdown — same channelGroups / channels / channelCount
+  // dispatch as the gauge output row, factored into a tiny helper for
+  // readability.
+  const currentChannel = edge?.dstDriverChannel ?? '';
+  const channelOpts = (() => {
+    let opts = '<option value="">—</option>';
+    let inList = false;
+    if (hint) {
+      if (Array.isArray(hint.channelGroups) && hint.channelGroups.length) {
+        for (const grp of hint.channelGroups) {
+          opts += `<optgroup label="${escHtml(grp.label)}">`;
+          for (const c of grp.channels) {
+            const v = typeof c === 'string' ? c : c.value;
+            const lbl = typeof c === 'string' ? c : (c.label || c.value);
+            if (v === currentChannel) inList = true;
+            opts += `<option value="${escHtml(v)}">${escHtml(lbl)}</option>`;
+          }
+          opts += '</optgroup>';
+        }
+      } else if (hint.channels) {
+        for (const c of hint.channels) {
+          if (c === currentChannel) inList = true;
+          opts += `<option value="${escHtml(c)}">${escHtml(c)}</option>`;
+        }
+      } else if (hint.channelCount) {
+        for (let c = 0; c < hint.channelCount; c++) {
+          if (String(c) === String(currentChannel)) inList = true;
+          opts += `<option value="${c}">${hint.formatChannel(c)}</option>`;
+        }
+      }
+    }
+    if (currentChannel && !inList) {
+      opts += `<option value="${escHtml(currentChannel)}" selected>${escHtml(currentChannel)} — not declared</option>`;
+    }
+    return opts;
+  })();
+
+  // Kind mismatch — same logic as gauge output rows but the source
+  // signal supplies the kind (analog/digital) instead of a port
+  // template. Looked up from SIM_SIGNALS for the input's chosen
+  // source.
+  let kindMismatchHtml = '';
+  if (edge && edge.dstDriver && edge.dstDriverChannel != null && edge.dstDriverChannel !== '' && input.sourceSignalId) {
+    const signal = (SIM_SIGNALS[group.simId]?.scalar || []).find(s => s.id === input.sourceSignalId);
+    const sourceKind = signal?.kind === 'digital' ? 'digital' : (signal?.kind === 'analog' ? 'analog' : null);
+    const driverKind = getChannelKind(edge.dstDriver, edge.dstDriverChannel);
+    if (sourceKind && driverKind && sourceKind !== driverKind) {
+      const tooltip = `Source signal "${edge.src}" is ${sourceKind}, but the selected ${edge.dstDriver} channel is ${driverKind}. SimLinkup will crash at runtime trying to cast a ${sourceKind} signal to a ${driverKind} one.`;
+      kindMismatchHtml = `<div class="map-channel-conflict" title="${escHtml(tooltip)}">⚠ kind mismatch — ${escHtml(sourceKind)} source wired to ${escHtml(driverKind)} channel</div>`;
+    }
+  }
+
+  // Invalid-source flag (mirror gauge stage-1 rows). Two cases here:
+  //   - The chosen sim signal isn't in the catalog (sim removed,
+  //     catalog refreshed, etc). `sourceMissing` is the local check.
+  //   - The active edge was already flagged invalid by
+  //     refreshInvalidEdgeFlags (catches both cases through a single
+  //     code path).
+  let invalidHint = '';
+  if ((sourceMissing || (edge && edge.invalid)) && !_suppressInvalidRowHint) {
+    invalidHint = `<div class="map-channel-conflict" title="Source signal not in the declared sim's catalog">⚠ source signal not found in catalog</div>`;
+  }
+
+  // Per-row test control. Only meaningful when the row's destination
+  // is a PoKeys output AND the dropdowns are filled in. Renders a
+  // toggle for digital/extbus and a slider for PWM. Disabled when
+  // unwired so the user doesn't click a no-op. Test state is latched
+  // across renders via _pokeysTestState (cleared on profile switch).
+  // Pass group + input ids through so the handler can resolve to
+  // the sim source signal at call time — used to route through
+  // SimLinkup's pipeline when SimLinkup is running.
+  const testControlHtml = renderPoKeysTestControlHtml(edge, group.id, input.id);
+
+  return `
+    <div class="map-direct-row">
+      <div class="map-direct-label" title="${escHtml(input.sourceSignalId || '')}">${escHtml(sourceLabel)}</div>
+      <div class="map-channel-arrow">→</div>
+      <select data-direct-driver="${escHtml(input.id)}"
+              onchange="onSetDirectDriver('${escHtml(group.id)}','${escHtml(input.id)}',this.value)">
+        ${driverOpts}
+      </select>
+      <select data-direct-device="${escHtml(input.id)}" ${driver ? '' : 'disabled'}
+              onchange="onSetDirectChannel('${escHtml(group.id)}','${escHtml(input.id)}','device',this.value)">
+        ${deviceOpts}
+      </select>
+      <select data-direct-channel="${escHtml(input.id)}" ${driver ? '' : 'disabled'}
+              onchange="onSetDirectChannel('${escHtml(group.id)}','${escHtml(input.id)}','channel',this.value)">
+        ${channelOpts}
+      </select>
+      ${testControlHtml}
+    </div>
+    ${invalidHint}
+    ${kindMismatchHtml}`;
+}
+
+// ── PoKeys test controls (latched test-drive of one output) ─────────────────
+//
+// The Mappings tab surfaces a small per-row Test affordance for PoKeys
+// destinations: a toggle button for digital/extbus, a slider for PWM.
+// State is held in _pokeysTestState across re-renders so toggling a
+// relay ON, navigating between tabs, and coming back leaves the
+// button green (the relay is still latched ON on the device).
+//
+// Cleared on profile switch — switching profiles is a strong signal
+// that the user is done with whatever they were testing.
+
+const _pokeysTestState = new Map();
+function _pokeysTestKey(serial, kind, index) {
+  return `${serial}|${kind}|${index}`;
+}
+function _resetPokeysTestState() { _pokeysTestState.clear(); }
+
+// Parse "DIGITAL_PIN[5]" / "PWM[3]" / "PoExtBus[12]" into {kind, index}.
+// Returns null for anything else (no test control rendered).
+function _pokeysParseChannel(channel) {
+  if (!channel) return null;
+  let m = channel.match(/^DIGITAL_PIN\[(\d+)\]$/);
+  if (m) return { kind: 'digital', index: parseInt(m[1], 10) };
+  m = channel.match(/^PWM\[(\d+)\]$/);
+  if (m) return { kind: 'pwm', index: parseInt(m[1], 10) };
+  m = channel.match(/^PoExtBus\[(\d+)\]$/);
+  if (m) return { kind: 'extbus', index: parseInt(m[1], 10) };
+  return null;
+}
+
+// Find the per-output config record (for invert/period). Returns null
+// if the device or output isn't declared — test still works but
+// invert defaults to false and PWM period to 20000us.
+function _pokeysOutputConfig(serial, kind, index) {
+  const p = profiles[activeIdx];
+  const dev = (p?.drivers?.pokeys?.devices || []).find(d => String(d.address) === String(serial));
+  if (!dev) return null;
+  if (kind === 'digital') return (dev.digitalOutputs || []).find(o => o.pin === index) || null;
+  if (kind === 'extbus')  return (dev.extBusOutputs || []).find(o => o.bit === index) || null;
+  if (kind === 'pwm')     return { device: dev };  // PWM doesn't carry per-output state; we need the device's period
+  return null;
+}
+
+function renderPoKeysTestControlHtml(edge, groupId, inputId) {
+  // No edge or non-PoKeys destination → no control. We render a
+  // placeholder span anyway so the grid stays balanced (otherwise
+  // PoKeys rows would be wider than non-PoKeys rows in mixed groups).
+  if (!edge || edge.dstDriver !== 'pokeys') {
+    return '<span class="map-test-cell"></span>';
+  }
+  const serial = edge.dstDriverDevice;
+  const parsed = _pokeysParseChannel(edge.dstDriverChannel);
+  if (!serial || !parsed) {
+    return '<span class="map-test-cell map-test-cell-disabled" title="Pick a destination first">—</span>';
+  }
+  const key = _pokeysTestKey(serial, parsed.kind, parsed.index);
+  const current = _pokeysTestState.get(key);
+  // groupId/inputId thread into the handlers so they can resolve
+  // back to the sim source signal id at call time. That's needed
+  // when SimLinkup is running — the handler then routes the test
+  // value through setSignals (sim shared memory) instead of
+  // setPoKeysOutput (direct USB), avoiding the cross-process
+  // device contention that crashes SimLinkup.
+  const gIdAttr = escHtml(groupId || '');
+  const iIdAttr = escHtml(inputId || '');
+  if (parsed.kind === 'pwm') {
+    const v = typeof current === 'number' ? current : 0;
+    const pct = Math.round(v * 100);
+    return `
+      <span class="map-test-cell">
+        <input type="range" class="map-test-pwm" min="0" max="1" step="0.01" value="${v}"
+               oninput="onPoKeysTestPwmInput('${escHtml(serial)}',${parsed.index},this.value,this)"
+               onchange="onPoKeysTestPwmCommit('${escHtml(serial)}',${parsed.index},this.value,'${gIdAttr}','${iIdAttr}')"
+               title="Test drive: 0..1 duty cycle (latched on the device)"/>
+        <span class="map-test-pwm-label">${pct}%</span>
+      </span>`;
+  }
+  // digital + extbus → toggle button. Green when ON, grey when OFF.
+  const on = current === 1 || current === true;
+  return `
+    <span class="map-test-cell">
+      <button class="map-test-toggle ${on ? 'on' : 'off'}"
+              onclick="onPoKeysTestToggle('${escHtml(serial)}','${escHtml(parsed.kind)}',${parsed.index},'${gIdAttr}','${iIdAttr}')"
+              title="Test drive: latched ${on ? 'ON' : 'OFF'} on the device. Click to flip.">
+        ${on ? 'ON' : 'OFF'}
+      </button>
+    </span>`;
+}
+
+// Tracks which sim bridges have an open session. The bridge's
+// setSignals refuses with "Session not open" until OpenSession runs
+// once; we lazily call startSession on first write per sim and cache
+// that fact so subsequent writes skip the round-trip. Invalidated
+// when startSession itself fails (e.g. user started BMS between
+// writes — the existing in-bridge guard refuses and we'll retry on
+// next click). Also invalidated on profile switch.
+const _bridgeSessionsOpen = new Set();
+async function _ensureBridgeSession(simId) {
+  if (!simId) return { ok: false, error: 'No sim id for this group.' };
+  if (_bridgeSessionsOpen.has(simId)) return { ok: true };
+  let result;
+  try {
+    // allowSimRunning: true — the test path doesn't care that the
+    // sim might overwrite our value on its next tick. We just need
+    // SimLinkup to see the bit briefly so it routes to the relay.
+    result = await window.api.bridge.startSession(simId, { allowSimRunning: true });
+  } catch (e) { return { ok: false, error: e?.message || 'startSession threw' }; }
+  if (result?.ok) {
+    _bridgeSessionsOpen.add(simId);
+    return { ok: true };
+  }
+  return { ok: false, error: result?.error || 'startSession failed' };
+}
+function _resetBridgeSessions() { _bridgeSessionsOpen.clear(); }
+
+// Cache the SimLinkup-running check briefly. The bridge call now
+// uses OpenMutex on a kernel mutex SimLinkup creates at startup
+// (was previously a `tasklist` shellout, which was taking ~3 s on
+// machines with AV process-enumeration hooks). At sub-millisecond
+// per-call the cache isn't strictly needed, but kept so a burst of
+// "All On" clicks stays predictable and a real "user just stopped
+// SimLinkup" transition isn't hidden for more than 2 s.
+let _simLinkupRunningCache = { value: null, at: 0 };
+async function _isSimLinkupRunning() {
+  const now = Date.now();
+  if (_simLinkupRunningCache.value !== null && now - _simLinkupRunningCache.at < 2000) {
+    return _simLinkupRunningCache.value;
+  }
+  let running = false;
+  try {
+    const result = await window.api.isSimLinkupRunning();
+    running = !!(result && result.running);
+  } catch { /* assume not running on error */ }
+  _simLinkupRunningCache = { value: running, at: now };
+  return running;
+}
+function _invalidateSimLinkupRunningCache() {
+  _simLinkupRunningCache = { value: null, at: 0 };
+}
+
+// Resolve a PoKeys test task to (path, payload) — either route via
+// SimLinkup's pipeline (write to sim shared memory) when SimLinkup
+// is running and the task has a sourceSignalId, OR route directly
+// to the device via setPoKeysOutput.
+//
+// Returns { ok, path: 'simlinkup'|'direct', error? }. The caller
+// performs the actual bridge call so it can manage cached-state
+// optimism and per-task error handling.
+//
+// `task` shape: { serial, kind, index, value, invert,
+//                 pwmPeriodMicroseconds, sourceSignalId, simId }
+async function _routePoKeysTestTask(task) {
+  if (task.sourceSignalId && task.simId && await _isSimLinkupRunning()) {
+    const session = await _ensureBridgeSession(task.simId);
+    if (!session.ok) return { ok: false, path: 'simlinkup', error: session.error };
+    const result = await window.api.bridge.setSignals(task.simId, {
+      [task.sourceSignalId]: task.value,
+    });
+    if (!result?.ok) {
+      if (/session not open/i.test(result?.error || '')) {
+        _bridgeSessionsOpen.delete(task.simId);
+      }
+      return { ok: false, path: 'simlinkup', error: result?.error || 'unknown error' };
+    }
+    return { ok: true, path: 'simlinkup' };
+  }
+  // SimLinkup not running — bridge has the device to itself.
+  const result = await window.api.bridge.setPoKeysOutput({
+    serial: Number(task.serial),
+    kind: task.kind,
+    index: task.index,
+    value: task.value,
+    invert: !!task.invert,
+    pwmPeriodMicroseconds: task.pwmPeriodMicroseconds || 20000,
+  });
+  if (!result?.ok) return { ok: false, path: 'direct', error: result?.error || 'unknown error' };
+  return { ok: true, path: 'direct' };
+}
+
+// Resolve a (serial, kind, index, groupId, inputId) tuple from a
+// per-row click into the (sourceSignalId, simId) needed for the
+// SimLinkup-routing path. Returns null when the group/input lookup
+// fails (e.g. stale UI vs. mutated state) — callers should fall
+// through to direct routing in that case.
+function _pokeysTestSourceFor(groupId, inputId) {
+  const p = profiles[activeIdx];
+  const group = (p?.directGroups || []).find(g => g.id === groupId);
+  if (!group) return null;
+  const input = (group.inputs || []).find(i => i.id === inputId);
+  if (!input) return null;
+  return { sourceSignalId: input.sourceSignalId || '', simId: group.simId || '' };
+}
+
+// Toggle one digital pin or PoExtBus bit. Optimistically flips the
+// cached state, sends the bridge call (via _routePoKeysTestTask
+// which picks the right path), reverts on error.
+async function onPoKeysTestToggle(serial, kind, index, groupId, inputId) {
+  const key = _pokeysTestKey(serial, kind, index);
+  const wasOn = _pokeysTestState.get(key) === 1 || _pokeysTestState.get(key) === true;
+  const newOn = !wasOn;
+  _pokeysTestState.set(key, newOn ? 1 : 0);
+  renderMappings();
+  const cfg = _pokeysOutputConfig(serial, kind, index) || {};
+  const src = _pokeysTestSourceFor(groupId, inputId) || {};
+  const result = await _routePoKeysTestTask({
+    serial, kind, index,
+    value: newOn ? 1 : 0,
+    invert: !!cfg.invert,
+    pwmPeriodMicroseconds: cfg.device?.pwmPeriodMicroseconds || 20000,
+    sourceSignalId: src.sourceSignalId,
+    simId: src.simId,
+  });
+  if (!result?.ok) {
+    _pokeysTestState.set(key, wasOn ? 1 : 0);
+    renderMappings();
+    toast(`PoKeys test failed: ${result.error}`);
+  }
+}
+
+// Live PWM slider: update the cached value + label immediately for
+// responsive UI, but DON'T fire a bridge call on every input event
+// — too chatty. Wait for the change event (mouse-up) to commit.
+function onPoKeysTestPwmInput(serial, index, value, sliderEl) {
+  const v = parseFloat(value);
+  if (!Number.isFinite(v)) return;
+  _pokeysTestState.set(_pokeysTestKey(serial, 'pwm', index), v);
+  // Update the inline label without a full re-render so the slider
+  // doesn't lose mouse-tracking.
+  const label = sliderEl?.parentElement?.querySelector('.map-test-pwm-label');
+  if (label) label.textContent = `${Math.round(v * 100)}%`;
+}
+
+async function onPoKeysTestPwmCommit(serial, index, value, groupId, inputId) {
+  const v = parseFloat(value);
+  if (!Number.isFinite(v)) return;
+  _pokeysTestState.set(_pokeysTestKey(serial, 'pwm', index), v);
+  const cfg = _pokeysOutputConfig(serial, 'pwm', index) || {};
+  const src = _pokeysTestSourceFor(groupId, inputId) || {};
+  const result = await _routePoKeysTestTask({
+    serial, kind: 'pwm', index,
+    value: v,
+    pwmPeriodMicroseconds: cfg.device?.pwmPeriodMicroseconds || 20000,
+    sourceSignalId: src.sourceSignalId,
+    simId: src.simId,
+  });
+  if (!result?.ok) {
+    toast(`PoKeys PWM test failed: ${result.error}`);
+  }
+}
+
+// Walk a direct group's wired PoKeys destinations and produce a
+// task list ready to feed into the bridge's setOutput command. Used
+// by the renderer to compute "are all currently ON?" for the group
+// toggle's visual state, and by the handler to actually fire the
+// bridge calls. Empty array when the group has no PoKeys
+// destinations — caller checks this to suppress the toggle.
+function _pokeysGroupTaskList(group) {
+  const p = profiles[activeIdx];
+  if (!p || !group) return [];
+  const tasks = [];
+  for (const inp of (group.inputs || [])) {
+    const edge = (p.chain.edges || []).find(e =>
+      e.stage === 'direct' && e.directGroupId === group.id && e.directInputId === inp.id
+    );
+    if (!edge || edge.dstDriver !== 'pokeys' || !edge.dst) continue;
+    const parsed = _pokeysParseChannel(edge.dstDriverChannel);
+    if (!parsed || !edge.dstDriverDevice) continue;
+    const cfg = _pokeysOutputConfig(edge.dstDriverDevice, parsed.kind, parsed.index) || {};
+    tasks.push({
+      serial: Number(edge.dstDriverDevice),
+      kind: parsed.kind,
+      index: parsed.index,
+      invert: !!cfg.invert,
+      pwmPeriodMicroseconds: cfg.device?.pwmPeriodMicroseconds || 20000,
+      // sourceSignalId + simId let _routePoKeysTestTask pick the
+      // SimLinkup-shared-memory path when SimLinkup is running.
+      sourceSignalId: inp.sourceSignalId || '',
+      simId: group.simId || '',
+    });
+  }
+  return tasks;
+}
+
+// All-On / All-Off for a single direct group. Walks every wired
+// PoKeys destination via _pokeysGroupTaskList and sends one bridge
+// call per output. Bridge calls are sequential (await per call) so
+// we don't flood the device with concurrent connections — each takes
+// maybe 50-100 ms, so a group of 20 lamps takes ~1.5 s. Acceptable
+// for a one-shot test gesture.
+async function onAllPoKeysTest(groupId, on) {
+  const p = profiles[activeIdx];
+  const group = (p.directGroups || []).find(g => g.id === groupId);
+  if (!group) return;
+  const tasks = _pokeysGroupTaskList(group);
+  if (tasks.length === 0) {
+    toast('No PoKeys destinations wired in this group.');
+    return;
+  }
+  // Optimistically flip cached state so the per-row toggles AND the
+  // group "ALL" toggle visually update before the bridge calls
+  // finish. Errors per task revert that task's cached state below.
+  for (const task of tasks) {
+    const value = on ? 1 : 0;
+    _pokeysTestState.set(_pokeysTestKey(task.serial, task.kind, task.index), value);
+  }
+  renderMappings();
+  let failures = 0;
+  let firstError = '';
+  for (const task of tasks) {
+    const result = await _routePoKeysTestTask({ ...task, value: on ? 1 : 0 });
+    if (!result?.ok) {
+      failures++;
+      if (!firstError) firstError = result.error;
+      _pokeysTestState.set(_pokeysTestKey(task.serial, task.kind, task.index), on ? 0 : 1);
+    }
+  }
+  if (failures > 0) {
+    renderMappings();
+    // If every task failed for the same reason (e.g. SimLinkup is
+    // running but rows have no source), surface that root cause
+    // rather than a generic count.
+    const detail = failures === tasks.length && firstError ? `: ${firstError}` : '';
+    toast(`${failures} of ${tasks.length} PoKeys output${tasks.length === 1 ? '' : 's'} failed to write${detail}`);
+  }
+}
+
+// ── Direct edge mutators ────────────────────────────────────────────────────
+//
+// Mirror of ensureStageTwoEdge / onSetSourceForInputPort / etc. but for
+// direct edges. Each direct edge is keyed on (groupId, inputId);
+// editing creates the edge if it doesn't exist, mutates if it does,
+// and prunes if both src and dst become empty.
+function _ensureDirectEdge(p, groupId, inputId) {
+  let edge = p.chain.edges.find(e =>
+    e.stage === 'direct' && e.directGroupId === groupId && e.directInputId === inputId
+  );
+  if (!edge) {
+    edge = {
+      stage: 'direct',
+      src: '', dst: '',
+      kind: 'analog',  // updated when source kind is known
+      srcGaugePn: null, srcGaugePort: null,
+      dstKind: 'driver',
+      dstGaugePn: null, dstGaugePort: null,
+      dstDriver: null, dstDriverDevice: null, dstDriverChannel: null,
+      directGroupId: groupId, directInputId: inputId,
+    };
+    p.chain.edges.push(edge);
+  }
+  return edge;
+}
+
+function _pruneDirectEdgeIfEmpty(p, groupId, inputId) {
+  p.chain.edges = p.chain.edges.filter(e => {
+    if (e.stage !== 'direct') return true;
+    if (e.directGroupId !== groupId || e.directInputId !== inputId) return true;
+    return e.src || e.dst;
+  });
+}
+
+function onSetDirectDriver(groupId, inputId, driver) {
+  const p = profiles[activeIdx];
+  const edge = _ensureDirectEdge(p, groupId, inputId);
+  edge.dstDriver = driver || null;
+  edge.dstDriverDevice = null;
+  edge.dstDriverChannel = null;
+  edge.dst = '';
+  edge.dstKind = driver ? 'driver' : 'unknown';
+  _pruneDirectEdgeIfEmpty(p, groupId, inputId);
+  renderMappings();
+}
+
+function onSetDirectChannel(groupId, inputId, field, value) {
+  const p = profiles[activeIdx];
+  const edge = (p.chain.edges || []).find(e =>
+    e.stage === 'direct' && e.directGroupId === groupId && e.directInputId === inputId
+  );
+  if (!edge || !edge.dstDriver) return;
+  if (field === 'device') edge.dstDriverDevice = value;
+  if (field === 'channel') edge.dstDriverChannel = value;
+  const hint = DRIVER_HINTS[edge.dstDriver];
+  if (hint && edge.dstDriverDevice != null && edge.dstDriverChannel != null && edge.dstDriverChannel !== '') {
+    edge.dst = hint.formatDestination(edge.dstDriverDevice, edge.dstDriverChannel);
+  } else {
+    edge.dst = '';
+  }
+  _pruneDirectEdgeIfEmpty(p, groupId, inputId);
+  renderMappings();
 }

@@ -49,4 +49,26 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      PoKeys USB enumerator — used by the `pokeys.enumerate` bridge
+      command to scan for plugged-in PoKeys boards and return their
+      serial numbers. Vendored into bridge/SimLinkupCalibrationBridge/lib/
+      so the editor's build doesn't depend on PoLabs's installer being
+      present on the build machine. Same DLL version (2025-11-04) the
+      C# SimLinkup HSM uses. x86 — matches the bridge's PlatformTarget.
+
+      <Private>true</Private> + the <None>...<CopyToOutputDirectory> entry
+      ensures the DLL lands next to the bridge exe in bin/<config>/ so
+      it can be loaded at runtime.
+    -->
+    <Reference Include="PoKeysDevice_DLL">
+      <HintPath>lib\PoKeysDevice_DLL.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <None Include="lib\PoKeysDevice_DLL.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

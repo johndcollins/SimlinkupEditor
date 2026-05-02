@@ -731,6 +731,34 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
   font-weight: normal;
   padding-bottom: 4px;
 }
+/* Per-output Name input — wider than other fields so longer labels
+   like "Master caution" don't get truncated. flex:1 lets it absorb
+   the available row width. */
+.hwconfig-pokeys-row .hwconfig-pokeys-name {
+  flex: 1;
+  min-width: 140px;
+}
+.hwconfig-pokeys-row .hwconfig-pokeys-name input {
+  width: 100%;
+}
+
+/* Standalone Identity-row checkbox below the grid (Connect/disconnect
+   per write). Sentence-style label, no uppercase styling — reads as
+   a hint rather than a column header. */
+.hwconfig-pokeys-cpw {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+  margin: 8px 0 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.hwconfig-pokeys-cpw input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
 .hwconfig-empty-row {
   font-size: 11px;
   color: var(--text-secondary);
@@ -2162,4 +2190,262 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
   font-family: var(--font-mono);
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+/* ── Direct mappings tab ── */
+.direct-toolbar { margin-bottom: 12px; }
+.direct-card {
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.direct-card-head {
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.direct-card-head::-webkit-details-marker { display: none; }
+.direct-card-head::marker                 { content: ''; }
+.direct-card-head:hover                   { filter: brightness(0.97); }
+.direct-card-chevron {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  text-align: center;
+  transition: transform .12s ease-out;
+  flex-shrink: 0;
+}
+details[open] > .direct-card-head > .direct-card-chevron { transform: rotate(90deg); }
+details.direct-card:not([open]) > .direct-card-head { border-bottom: none; }
+.direct-card-headline {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.direct-card-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 6px;
+  min-width: 120px;
+}
+.direct-card-sim {
+  font-size: 11px;
+  padding: 4px 6px;
+  flex-shrink: 0;
+  min-width: 140px;
+}
+.direct-card-body { padding: 10px 14px; }
+.direct-card-actions { margin-top: 8px; }
+.direct-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+.direct-input-row input[type="text"] {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.direct-wired-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--bg-success, #d1fae5);
+  color: var(--text-success, #065f46);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.direct-input-wired {
+  font-size: 10px;
+  color: var(--text-success, #065f46);
+  white-space: nowrap;
+}
+.direct-input-unwired {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* Mappings tab — direct mapping rows. One row per declared input in
+   a group: source-label / arrow / driver / board / output / test.
+   The test column is reserved (placeholder span) for non-PoKeys
+   destinations so all rows in mixed groups stay vertically aligned. */
+.map-direct-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) 14px 1fr 80px 1fr 90px;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 14px;
+}
+.map-direct-row select {
+  font-size: 11px;
+  padding: 3px 5px;
+  min-width: 0;
+}
+.map-direct-row select:disabled { opacity: 0.4; }
+.map-direct-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* PoKeys test affordance per direct-mapping row. The cell renders as
+   either a toggle button (digital/extbus) or a slider+label (PWM),
+   or as an empty placeholder for non-PoKeys destinations / unwired
+   rows. The cell width is fixed in the parent grid template (90px)
+   so all rows align. */
+.map-test-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+.map-test-cell-disabled {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.map-test-toggle {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 12px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  letter-spacing: .06em;
+  font-family: inherit;
+  text-transform: uppercase;
+  white-space: nowrap;
+  min-width: 50px;
+}
+/* Green when latched ON, grey when OFF — matches the "green is on /
+   gray is off" convention specified by the user. */
+.map-test-toggle.on {
+  background: #22c55e;
+  color: #fff;
+  border-color: #16a34a;
+}
+.map-test-toggle.on:hover { background: #16a34a; }
+.map-test-toggle.off {
+  background: var(--bg-secondary, #e5e7eb);
+  color: var(--text-secondary, #6b7280);
+  border-color: var(--border, #cbd5e1);
+}
+.map-test-toggle.off:hover { filter: brightness(0.95); }
+.map-test-toggle:disabled { opacity: 0.4; cursor: not-allowed; }
+.map-test-pwm { width: 60px; }
+.map-test-pwm-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  width: 32px;
+  text-align: right;
+}
+
+/* Per-group All On / All Off toolbar — sits between the section
+   header and the first row. Only renders when the group has at
+   least one PoKeys destination wired. */
+.map-direct-test-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 4px 14px 8px;
+}
+
+/* PoKeys Hardware Config Identity row — Serial input + Detect button
+   side by side. The wrapping <label> already provides the column-style
+   layout; this just keeps the input + button on one row inside it. */
+.hwconfig-pokeys-serial {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.hwconfig-pokeys-serial input { flex: 1; min-width: 0; }
+.hwconfig-pokeys-serial button { flex-shrink: 0; }
+
+/* PoKeys Detect picker modal. Floats above everything; clicking the
+   backdrop or the Cancel button dismisses without changing state. */
+.pokeys-detect-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.pokeys-detect-modal {
+  background: var(--bg-card);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  max-width: 480px;
+  width: calc(100% - 32px);
+  max-height: 70vh;
+  overflow: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.pokeys-detect-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.pokeys-detect-help {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.pokeys-detect-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.pokeys-detect-row {
+  text-align: left;
+  padding: 8px 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+.pokeys-detect-row:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+.pokeys-detect-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pokeys-detect-row-serial {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+}
+.pokeys-detect-row-meta {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.pokeys-detect-actions {
+  display: flex;
+  justify-content: flex-end;
 }

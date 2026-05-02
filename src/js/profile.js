@@ -44,7 +44,7 @@ async function setDir(dir, save) {
   const names = await window.api.listProfiles(dir);
 
   // Initialise all profiles as stubs
-  profiles = names.map(n => ({ name: n, instruments: [], chain: emptyChain(), drivers: {}, simSupports: [], driverConfigsRaw: {}, gaugeConfigs: {}, gaugeConfigsRaw: {}, loaded: false }));
+  profiles = names.map(n => ({ name: n, instruments: [], chain: emptyChain(), drivers: {}, simSupports: [], directGroups: [], driverConfigsRaw: {}, gaugeConfigs: {}, gaugeConfigsRaw: {}, loaded: false }));
   activeIdx = null;
   // Reset the editor pane — without this, the previously-selected profile's
   // title, default badge, and tab DOM stay visible until the user clicks
@@ -87,6 +87,29 @@ async function selectProfile(i) {
   // profile (those should have already been auto-saved or saved
   // manually before the switch).
   if (typeof _gaugeDirty !== 'undefined') _gaugeDirty.clear();
+  // PoKeys test state ("relay X is currently latched ON for testing")
+  // is profile-scoped and cleared on switch. The hardware itself
+  // keeps the last value we wrote until something else (us, the
+  // vendor tool, SimLinkup) drives it again — so switching profiles
+  // doesn't actually un-test the relay, it just stops the editor's
+  // toggle from claiming it knows the state.
+  if (typeof _resetPokeysTestState === 'function') _resetPokeysTestState();
+  // Invalidate the SimLinkup-running cache so the new profile's
+  // first test click rechecks rather than trusting a stale "yes"
+  // from minutes ago. Cheap (one shellout) compared to a wrong-path
+  // test write.
+  if (typeof _invalidateSimLinkupRunningCache === 'function') _invalidateSimLinkupRunningCache();
+  // Bridge sessions are sim-scoped not profile-scoped, but switching
+  // profiles is a strong signal the user's done with whatever they
+  // were testing — drop the open-session cache so the next test
+  // click does a fresh startSession (cheap; ~1 IPC call).
+  if (typeof _resetBridgeSessions === 'function') _resetBridgeSessions();
+  // Mappings tab filter — reset on profile switch so the new profile
+  // doesn't surprise the user by hiding most of its cards behind a
+  // filter set up for the previous profile.
+  if (typeof mapSearch !== 'undefined') mapSearch = '';
+  if (typeof mapStatusFilter !== 'undefined') mapStatusFilter = 'all';
+  if (typeof mapTypeFilter !== 'undefined') mapTypeFilter = 'all';
   // Per-gauge auto-save flags are persisted in settings.json keyed by
   // profile + PN. Hydrate before renderEditor() so the Calibration tab
   // paints with the right checkbox state on first render.
@@ -122,7 +145,7 @@ async function addProfile() {
     toast('A profile with that name already exists.');
     return;
   }
-  profiles.push({ name, instruments: [], chain: emptyChain(), drivers: {}, simSupports: [], driverConfigsRaw: {}, gaugeConfigs: {}, gaugeConfigsRaw: {}, loaded: true });
+  profiles.push({ name, instruments: [], chain: emptyChain(), drivers: {}, simSupports: [], directGroups: [], driverConfigsRaw: {}, gaugeConfigs: {}, gaugeConfigsRaw: {}, loaded: true });
   inp.value = '';
   await selectProfile(profiles.length - 1);
 }

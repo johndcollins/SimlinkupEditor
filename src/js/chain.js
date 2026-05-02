@@ -115,12 +115,24 @@ function parseDestination(id, instrumentPrefixMap, declaredPns) {
 }
 
 // Classify a single mapping row. Pure function — no side effects.
+//
+// Stage values:
+//   1       — sim source (F4_*) → gauge HSM input port
+//   '1.5'   — gauge HSM output → another gauge HSM input (rare)
+//   2       — gauge HSM output → output driver channel
+//   'direct'— sim source (F4_*) → output driver channel, no gauge HSM
+//             in between. Used for cockpit lamps, direct relay drives,
+//             and any pass-through where the user wants raw sim values
+//             at hardware without an intermediate transform.
+//   'unknown' — anything else; surfaced as broken state for the user.
 function classifyMapping(src, dst, kind, instrumentPrefixMap, declaredPns) {
   const dstParsed = parseDestination(dst, instrumentPrefixMap, declaredPns);
   const srcGauge = parseGaugePort(src, instrumentPrefixMap, declaredPns);
+  const isSimSource = src.startsWith('F4_');
 
   let stage = 'unknown';
-  if (src.startsWith('F4_')) stage = 1;
+  if (isSimSource && dstParsed.kind === 'driver') stage = 'direct';
+  else if (isSimSource) stage = 1;
   else if (srcGauge && dstParsed.kind === 'driver') stage = 2;
   else if (srcGauge && dstParsed.kind === 'gauge') stage = '1.5';
 
@@ -215,9 +227,59 @@ function buildInstrumentView(edges, instrumentPrefixMap) {
 // the per-file context is also used: edges in `Simtek100207_110*.mapping` are
 // attributed to 10-0207_110, edges in `Simtek100207<rest>.mapping` (without
 // `_110` after the digits) are attributed to 10-0207.
+// Parse a single XML comment for direct-mapping metadata. Two flavors
+// of comment appear in Direct_*.mapping files:
+//
+//   Header (once at top of file, declares the group):
+//     [DirectGroup] Name: "Cockpit Lamps" GroupId: "<uuid>" SimId: "falcon4"
+//
+//   Per-row (immediately above each <SignalMapping>, declares an input):
+//     [DirectInput] InputId: "<uuid>" Label: "Gear down lamp"
+//                   GroupId: "<uuid>" GroupName: "Cockpit Lamps" SimId: "falcon4"
+//
+// The per-row comment redundantly carries group info so that even if
+// the header comment is stripped (hand-edited file), each row still
+// reconstructs its group. Returns { kind: 'header'|'input', ... } or
+// null if neither pattern matches.
+function parseDirectMappingMetadata(commentText) {
+  if (!commentText) return null;
+  if (commentText.includes('[DirectGroup]')) {
+    const name      = (commentText.match(/Name:\s*"([^"]*)"/) || [])[1];
+    const groupId   = (commentText.match(/GroupId:\s*"([^"]*)"/) || [])[1];
+    const simId     = (commentText.match(/SimId:\s*"([^"]*)"/) || [])[1];
+    if (!groupId) return null;
+    return { kind: 'header', groupId, groupName: name || '', simId: simId || '' };
+  }
+  if (commentText.includes('[DirectInput]')) {
+    const inputId    = (commentText.match(/InputId:\s*"([^"]*)"/) || [])[1];
+    const inputLabel = (commentText.match(/Label:\s*"([^"]*)"/) || [])[1];
+    const groupId    = (commentText.match(/GroupId:\s*"([^"]*)"/) || [])[1];
+    const groupName  = (commentText.match(/GroupName:\s*"([^"]*)"/) || [])[1];
+    const simId      = (commentText.match(/SimId:\s*"([^"]*)"/) || [])[1];
+    if (!inputId || !groupId) return null;
+    return {
+      kind: 'input',
+      inputId, inputLabel: inputLabel || '',
+      groupId, groupName: groupName || '', simId: simId || '',
+    };
+  }
+  return null;
+}
+
 function parseMappingsFromXml(fileList, declaredPns) {
   const prefixMap = buildInstrumentPrefixMap();
   const edges = [];
+  // Direct mappings are sim source → driver destination, no gauge HSM
+  // in between. The gauge-routed mappings carry all their metadata in
+  // the source/destination signal IDs, but direct mappings need an
+  // editor-side concept of "groups" + "named inputs" to give the user
+  // a Direct tab they can author. That metadata travels in XML
+  // comments preceding each <SignalMapping> in DirectMappings.mapping
+  // (the file is plain SimLinkup XML to the runtime — comments are
+  // ignored by SimLinkup's XmlSerializer). We reconstruct the groups
+  // from those comments so the editor's Direct tab can show what the
+  // user authored.
+  const directGroupsByGroupId = new Map();
   // Capture which on-disk file each PN's mappings came from. Used at save
   // time to preserve user/sample filenames (e.g. Nigel's
   // "Lilbern3321rpm.mapping" or his pair of
@@ -242,36 +304,106 @@ function parseMappingsFromXml(fileList, declaredPns) {
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(content, 'text/xml');
-    const nodes = doc.querySelectorAll('SignalMapping');
     // Track which gauge ports appear in this file, grouped by PN.
     const portsByPn = new Map();
-    nodes.forEach(node => {
-      const srcEl = node.querySelector('Source');
-      const dstEl = node.querySelector('Destination');
-      const src = srcEl?.querySelector('Id')?.textContent?.trim() || '';
-      const dst = dstEl?.querySelector('Id')?.textContent?.trim() || '';
-      if (!src || !dst) return;
-      // <Source xsi:type="DigitalSignal"> vs "AnalogSignal"
-      const xsiType = srcEl?.getAttribute('xsi:type')
-                   || dstEl?.getAttribute('xsi:type') || 'AnalogSignal';
-      const kind = xsiType === 'DigitalSignal' ? 'digital' : 'analog';
-      const edge = classifyMapping(src, dst, kind, prefixMap, effectivePns);
-      edges.push(edge);
-      // Track gauge PN + port for the file → port-set map.
-      let pn = null;
-      let port = null;
-      if (edge.stage === 1 && edge.dstGaugePn) {
-        pn = edge.dstGaugePn;
-        port = edge.dstGaugePort;
-      } else if ((edge.stage === 2 || edge.stage === '1.5') && edge.srcGaugePn) {
-        pn = edge.srcGaugePn;
-        port = edge.srcGaugePort;
+
+    // Walk the SignalMappings container directly so we can pair each
+    // <SignalMapping> with its preceding XML comment (which carries
+    // direct-mapping metadata). querySelectorAll only returns
+    // elements; we need the full child sequence including comment
+    // nodes. Multiple SignalMappings parents are unlikely but
+    // defensively iterate all of them.
+    const ensureGroup = (groupId, groupName, simId) => {
+      let g = directGroupsByGroupId.get(groupId);
+      if (!g) {
+        g = { id: groupId, name: groupName || '', simId: simId || '', inputs: [] };
+        directGroupsByGroupId.set(groupId, g);
+      } else {
+        // Last-non-empty-wins for the human-readable fields. The
+        // groupId is the stable identity.
+        if (groupName) g.name = groupName;
+        if (simId) g.simId = simId;
       }
-      if (pn && port) {
-        if (!portsByPn.has(pn)) portsByPn.set(pn, new Set());
-        portsByPn.get(pn).add(port);
+      return g;
+    };
+
+    const containers = doc.querySelectorAll('SignalMappings');
+    for (const container of containers) {
+      let pendingDirectInput = null;
+      for (const child of container.childNodes) {
+        if (child.nodeType === 8 /* COMMENT_NODE */) {
+          const meta = parseDirectMappingMetadata(child.nodeValue || '');
+          if (!meta) continue;
+          if (meta.kind === 'header') {
+            // Header comment registers the group even if it has zero
+            // rows — that way an empty Direct_*.mapping file (group
+            // declared but nothing wired yet) still surfaces in the
+            // editor's Direct tab.
+            ensureGroup(meta.groupId, meta.groupName, meta.simId);
+          } else if (meta.kind === 'input') {
+            pendingDirectInput = meta;
+          }
+          continue;
+        }
+        if (child.nodeType !== 1 /* ELEMENT_NODE */) continue;
+        if (child.tagName !== 'SignalMapping') {
+          pendingDirectInput = null;
+          continue;
+        }
+        const node = child;
+        const srcEl = node.querySelector('Source');
+        const dstEl = node.querySelector('Destination');
+        const src = srcEl?.querySelector('Id')?.textContent?.trim() || '';
+        const dst = dstEl?.querySelector('Id')?.textContent?.trim() || '';
+        if (!src || !dst) { pendingDirectInput = null; continue; }
+        // <Source xsi:type="DigitalSignal"> vs "AnalogSignal"
+        const xsiType = srcEl?.getAttribute('xsi:type')
+                     || dstEl?.getAttribute('xsi:type') || 'AnalogSignal';
+        const kind = xsiType === 'DigitalSignal' ? 'digital' : 'analog';
+        const edge = classifyMapping(src, dst, kind, prefixMap, effectivePns);
+        // Stitch direct-mapping metadata onto the edge + register the
+        // group's input. If the comment is missing (hand-edited file),
+        // the edge still works at runtime — SimLinkup ignores comments
+        // — but it'll show as an orphan direct row in the editor.
+        if (edge.stage === 'direct' && pendingDirectInput) {
+          edge.directInputId = pendingDirectInput.inputId;
+          edge.directGroupId = pendingDirectInput.groupId;
+          const g = ensureGroup(
+            pendingDirectInput.groupId,
+            pendingDirectInput.groupName,
+            pendingDirectInput.simId,
+          );
+          // The input's source signal id IS the edge's src — they
+          // should always be in lockstep. Stash it on the input so
+          // the Direct tab dropdown renders with the right selection
+          // on load. Legacy comments still carry an `inputLabel`
+          // field (now ignored) — older parses populated `label` on
+          // the input, which is fine: it'll just be unused.
+          if (!g.inputs.find(i => i.id === pendingDirectInput.inputId)) {
+            g.inputs.push({
+              id: pendingDirectInput.inputId,
+              sourceSignalId: edge.src || '',
+            });
+          }
+        }
+        pendingDirectInput = null;
+        edges.push(edge);
+        // Track gauge PN + port for the file → port-set map.
+        let pn = null;
+        let port = null;
+        if (edge.stage === 1 && edge.dstGaugePn) {
+          pn = edge.dstGaugePn;
+          port = edge.dstGaugePort;
+        } else if ((edge.stage === 2 || edge.stage === '1.5') && edge.srcGaugePn) {
+          pn = edge.srcGaugePn;
+          port = edge.srcGaugePort;
+        }
+        if (pn && port) {
+          if (!portsByPn.has(pn)) portsByPn.set(pn, new Set());
+          portsByPn.get(pn).add(port);
+        }
       }
-    });
+    }
 
     if (!file) continue;
     // Claim this file for each PN whose ports it contains.
@@ -295,7 +427,11 @@ function parseMappingsFromXml(fileList, declaredPns) {
     }
   }
   const instruments = buildInstrumentView(edges, prefixMap);
-  return { edges, instruments, filesByPn };
+  // Surface the reconstructed direct groups so applyLoadedChain can
+  // store them on the profile. Empty groups (declared but no rows)
+  // round-trip via header-only files — see parseDirectMappingHeader.
+  const directGroups = [...directGroupsByGroupId.values()];
+  return { edges, instruments, filesByPn, directGroups };
 }
 
 // Given a .mapping filename, return the set of gauge PNs whose class short
@@ -468,6 +604,11 @@ function applyLoadedChain(p, mappingFileList, hsmRegistryText, ssmRegistryText, 
   const chain = parseMappingsFromXml(mappingFileList, declaredPns);
   p.chain = chain;
   p.driverConfigsRaw = driverConfigsRaw || {};
+  // Direct mappings: groups reconstructed from XML comments in
+  // Direct_*.mapping files. Each group carries name, simId, and an
+  // ordered input list. Edges with stage='direct' carry directGroupId
+  // + directInputId pointing back into this list.
+  p.directGroups = chain.directGroups || [];
   // Per-PN list of legacy mapping files captured at load time. Save uses
   // this to preserve user/sample filenames across edits (so Nigel's
   // "Lilbern3321rpm.mapping" doesn't get renamed to the editor's default
@@ -606,7 +747,11 @@ function findInvalidEdges(p) {
 function refreshInvalidEdgeFlags(p) {
   const known = buildKnownSourceIds(p.simSupports || []);
   for (const e of p.chain.edges) {
-    if (e.stage === 1 && e.src) {
+    // Both stage-1 (sim → gauge) and direct (sim → driver) edges have
+    // sim sources that need to be validated against the declared sim
+    // support catalog. Stage-2 / 1.5 edges have gauge sources, no
+    // catalog check applies.
+    if ((e.stage === 1 || e.stage === 'direct') && e.src) {
       e.invalid = !isSourceIdValid(e.src, known);
     } else {
       e.invalid = false;

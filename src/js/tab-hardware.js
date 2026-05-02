@@ -59,11 +59,16 @@ function renderHardwareCard(driverId, channelsWired) {
           </div>
         </div>`;
     } else if (meta.deviceShape === 'address') {
+      // Per-driver placeholder — most address-shape drivers use I²C-style
+      // hex addresses (HenkSDI/HenkQuadSinCos/NiclasMorinDTS), but PoKeys
+      // is addressed by USB device serial number which is a plain integer
+      // visible on the board's silkscreen and in the PoKeys vendor tool.
+      const placeholder = driverId === 'pokeys' ? '52153 (serial)' : '0x30';
       const rows = decl.devices.map((d, idx) => `
         <div class="hw-device-row">
           <input type="text" value="${escHtml(d.address ?? '')}"
                  onchange="setDriverDeviceAddress('${driverId}', ${idx}, this.value)"
-                 placeholder="0x30" style="flex:1;font-family:var(--font-mono);font-size:11px"/>
+                 placeholder="${escHtml(placeholder)}" style="flex:1;font-family:var(--font-mono);font-size:11px"/>
           <button class="btn-sm btn-danger" onclick="removeDriverDevice('${driverId}', ${idx})">×</button>
         </div>`).join('');
       bodyHtml = `
@@ -84,17 +89,6 @@ function renderHardwareCard(driverId, channelsWired) {
   return card;
 }
 
-// PoKeys is split across two driver ids (`pokeys_digital` and
-// `pokeys_pwm`) for kind-mismatch validator purposes, but represents
-// ONE physical class of board with ONE config file. The two declarations
-// share a single `devices` array by reference: adding a PoKeys to either
-// id reuses the other's array so the user sees a single coherent device
-// list, edits land in one place, and the save flow emits the file once.
-const POKEYS_DRIVER_PARTNER = {
-  pokeys_digital: 'pokeys_pwm',
-  pokeys_pwm: 'pokeys_digital',
-};
-
 function toggleDriver(driverId) {
   const p = profiles[activeIdx];
   if (p.drivers[driverId]) {
@@ -105,16 +99,7 @@ function toggleDriver(driverId) {
     }
     delete p.drivers[driverId];
   } else {
-    // PoKeys partner-share: if the partner id is already declared, link
-    // both decls to the SAME devices array so adding a board to either
-    // shows up in both. Without this, the user could declare both ids
-    // and end up with two unrelated device lists.
-    const partner = POKEYS_DRIVER_PARTNER[driverId];
-    if (partner && p.drivers[partner]) {
-      p.drivers[driverId] = { devices: p.drivers[partner].devices };
-    } else {
-      p.drivers[driverId] = { devices: [DRIVER_META[driverId].defaultDevice()] };
-    }
+    p.drivers[driverId] = { devices: [DRIVER_META[driverId].defaultDevice()] };
   }
   renderEditor();
 }
@@ -137,12 +122,18 @@ function removeDriverDevice(driverId, idx) {
   }
   const meta = DRIVER_META[driverId];
   const dev = decl.devices[idx];
-  const targetValue = meta.deviceShape === 'address' ? dev.address : String(idx);
+  // Identity used in edges' dstDriverDevice: address-shape uses the
+  // address field; count-shape normally uses the index, but PoKeys
+  // is the exception (count-shape for declaration but addressed by
+  // serial in signal ids — see DRIVER_META.pokeys comment).
+  const targetValue = meta.deviceShape === 'address'
+    ? dev.address
+    : (driverId === 'pokeys' ? dev.address : String(idx));
   const wired = p.chain.edges.filter(e =>
-    e.dstDriver === driverId && String(e.dstDriverDevice) === String(targetValue)
+    e.dstDriver === driverId && String(e.dstDriverDevice) === String(targetValue ?? '')
   ).length;
   if (wired > 0) {
-    toast(`Cannot remove device ${targetValue}: ${wired} channel${wired === 1 ? ' is' : 's are'} wired to it.`);
+    toast(`Cannot remove device ${targetValue || '#' + idx}: ${wired} channel${wired === 1 ? ' is' : 's are'} wired to it.`);
     return;
   }
   decl.devices.splice(idx, 1);

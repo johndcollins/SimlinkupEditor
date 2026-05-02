@@ -60,24 +60,16 @@ const DRIVER_PATTERNS = [
   { driver: 'teensyvectordrawing', re: /^TeensyVectorDrawing(?:\[([^\]]+)\])?__?(.+)$/,
     parse: m => ({ device: m[1] ?? null, channel: m[2] }),
     cls: 'SimLinkup.HardwareSupport.TeensyVectorDrawing.TeensyVectorDrawingHardwareSupportModule' },
-  // PoKeys output driver. The C# HSM is a single class
-  // (PoKeysHardwareSupportModule), but the editor splits it into two
-  // catalog entries — `pokeys_digital` and `pokeys_pwm` — because the
-  // device exposes both kinds and the kind-mismatch validator keys off
-  // a flat driver -> kind map. Splitting at this layer keeps the
-  // validator simple and gives users the strictest authoring-time
-  // safety. Both entries point at the same C# class FQN; the
-  // registry-build code in save.js deduplicates by class name so the
-  // <Module> appears once even if both are declared.
-  // PoKeys[<serial>]__DIGITAL_PIN[<pin>]
-  { driver: 'pokeys_digital',
-    re: /^PoKeys\[(\d+)\]__DIGITAL_PIN\[(\d+)\]$/,
-    parse: m => ({ device: m[1], channel: `DIGITAL_PIN[${m[2]}]` }),
-    cls: 'SimLinkup.HardwareSupport.PoKeys.PoKeysHardwareSupportModule' },
-  // PoKeys[<serial>]__PWM[<channel>]
-  { driver: 'pokeys_pwm',
-    re: /^PoKeys\[(\d+)\]__PWM\[(\d+)\]$/,
-    parse: m => ({ device: m[1], channel: `PWM[${m[2]}]` }),
+  // PoKeys output driver. Single C# HSM class
+  // (PoKeysHardwareSupportModule) and a single editor driver id —
+  // the board legitimately exposes three output kinds (digital pins,
+  // PWM channels, PoExtBus relay bits), so the kind-mismatch validator
+  // dispatches per-channel via a function in DRIVER_CHANNEL_KIND
+  // rather than a flat driver -> kind lookup.
+  // PoKeys[<serial>]__DIGITAL_PIN[<pin>] | __PWM[<n>] | __PoExtBus[<bit>]
+  { driver: 'pokeys',
+    re: /^PoKeys\[(\d+)\]__(DIGITAL_PIN|PWM|PoExtBus)\[(\d+)\]$/,
+    parse: m => ({ device: m[1], channel: `${m[2]}[${m[3]}]` }),
     cls: 'SimLinkup.HardwareSupport.PoKeys.PoKeysHardwareSupportModule' },
 ];
 
@@ -198,32 +190,28 @@ const DRIVER_META = {
     // serialised by renderTeensyVectorDrawingConfig.
     defaultDevice: () => teensyVectorDrawingDefaultDevice(),
   },
-  pokeys_digital: {
-    label: 'PoKeys (digital pins)',
+  pokeys: {
+    label: 'PoKeys',
     configFilename: 'PoKeysHardwareSupportModule.config',
     cls: 'SimLinkup.HardwareSupport.PoKeys.PoKeysHardwareSupportModule',
-    deviceShape: 'address',
-    // PoKeys is multi-device, addressed by serial number. The address
-    // field stores the serial as a numeric string (matches the
-    // address-shape convention used by HenkSDI / NiclasMorinDTS).
-    // Each device carries a Name, a per-device PWM period, and lists
-    // of declared digital and PWM outputs. The state object is shared
-    // by reference with `pokeys_pwm` (see parseDriverConfigs); only
-    // `pokeys_digital` actually emits the .config file on save.
-    defaultDevice: () => poKeysDefaultDevice(),
-  },
-  pokeys_pwm: {
-    label: 'PoKeys (PWM channels)',
-    // Same on-disk file as pokeys_digital. The save.js registry-build
-    // code already deduplicates by class FQN so both <Module> entries
-    // collapse to one in HardwareSupportModule.registry.
-    configFilename: 'PoKeysHardwareSupportModule.config',
-    cls: 'SimLinkup.HardwareSupport.PoKeys.PoKeysHardwareSupportModule',
-    deviceShape: 'address',
-    // skipConfigFile signals save.js NOT to render the .config a
-    // second time when both pokeys_digital and pokeys_pwm are declared.
-    // pokeys_digital is the canonical writer.
-    skipConfigFile: true,
+    // count-shape declaration: the Hardware tab shows just N boards
+    // with +/− buttons (matching AnalogDevices). The board's
+    // identity (serial number) lives on the Hardware Config card
+    // alongside its name, PWM period, and output lists — that way
+    // the user has ONE place to manage each board's full state
+    // rather than entering the serial in the Hardware tab and
+    // everything else in Hardware Config.
+    //
+    // Hybrid: even though declaration is count-shape, the Mappings
+    // tab's Board dropdown surfaces each device's `address` (the
+    // serial) as the option value because that's what the signal
+    // ids and C# HSM lookup use. The Mappings dropdown population
+    // logic in tab-mappings.js's effectiveDriverHint special-cases
+    // PoKeys to pull `address` instead of the position index.
+    deviceShape: 'count',
+    // The board exposes both digital and analog kinds simultaneously;
+    // the kind-mismatch validator dispatches per-channel via
+    // DRIVER_CHANNEL_KIND.pokeys (see below).
     defaultDevice: () => poKeysDefaultDevice(),
   },
 };
@@ -262,8 +250,7 @@ const DRIVER_OPTIONS = [
   { value: 'teensyewmu',    label: 'Teensy EWMU' },
   { value: 'teensyrwr',     label: 'Teensy RWR' },
   { value: 'teensyvectordrawing', label: 'Teensy Vector Drawing' },
-  { value: 'pokeys_digital', label: 'PoKeys (digital pins)' },
-  { value: 'pokeys_pwm',     label: 'PoKeys (PWM channels)' },
+  { value: 'pokeys',         label: 'PoKeys' },
 ];
 
 // Per-driver hints used by the channel picker. `devices` is a default device
@@ -284,21 +271,19 @@ const DRIVER_HINTS = {
                     formatDestination: (d, c) => `HenkSDI[${d}]__${c}` },
   henkquadsincos: { devices: ['0x53'], channelCount: 0, channels: ['SIN_1','COS_1','SIN_2','COS_2','SIN_3','COS_3','SIN_4','COS_4'],
                     formatDestination: (d, c) => `HenkQuadSinCos[${d}]__${c}` },
-  // PoKeys hints — `devices` is a placeholder; the real per-profile
-  // device list is overlaid by effectiveDriverHint() in tab-mappings.js,
-  // pulling serials out of p.drivers.pokeys_digital.devices[].address.
-  // Channels are explicit because we need to distinguish DIGITAL_PIN[1..55]
-  // from PWM[1..6] in the dropdown — splitting into two driver entries
-  // means each only surfaces ONE channel kind.
-  pokeys_digital: { devices: [], channelCount: 0,
-                    channels: Array.from({length: 55}, (_, i) => `DIGITAL_PIN[${i+1}]`),
-                    formatDestination: (d, c) => `PoKeys[${d}]__${c}` },
-  pokeys_pwm: { devices: [], channelCount: 0,
-                // PWM1..PWM6 — labelled with the physical pin so users
-                // wiring relays/RC servos pick the right channel without
-                // referencing the manual. PWM1=pin17 .. PWM6=pin22.
-                channels: Array.from({length: 6}, (_, i) => `PWM[${i+1}]`),
-                formatDestination: (d, c) => `PoKeys[${d}]__${c}` },
+  // PoKeys: single driver id, three output kinds. `devices` is a
+  // placeholder; the real per-profile device list is overlaid by
+  // effectiveDriverHint() in tab-mappings.js. The per-profile filter
+  // there ALSO narrows `channels` to only what the user has declared
+  // in Hardware Config — without that filter, the dropdown would show
+  // all 141 possible outputs (55 GPIO + 6 PWM + 80 PoExtBus) which is
+  // overwhelming and includes outputs the user hasn't wired. The
+  // declared-only filter happens in tab-mappings.js because it needs
+  // access to `p.drivers.pokeys.devices[].digitalOutputs|pwmOutputs|
+  // extBusOutputs`.
+  pokeys: { devices: [], channelCount: 0,
+            channels: [],  // populated per-profile by effectiveDriverHint
+            formatDestination: (d, c) => `PoKeys[${d}]__${c}` },
 };
 
 // Channel kind per driver, used by the Mappings tab to surface a
@@ -309,10 +294,14 @@ const DRIVER_HINTS = {
 // at editor authoring time so the user sees a red row before saving a
 // .mapping file that would crash the gauge.
 //
+// Values are either a string ('analog' | 'digital') for drivers whose
+// channels are all the same kind, or a function (channelStr) => string
+// for drivers like PoKeys that mix kinds. Use `getChannelKind(driver,
+// channel)` below as the call site rather than indexing directly.
+//
 // Drivers omitted from this map (currently `phcc`) are treated as
 // 'unknown' — channels span both kinds depending on the configured
-// peripheral, so we don't warn on them. A future per-channel-kind
-// extension can refine that without changing the call site.
+// peripheral, so we don't warn on them.
 const DRIVER_CHANNEL_KIND = {
   analogdevices:        'analog',  // DAC outputs
   henksdi:              'analog',  // PWM channels + synchro position
@@ -322,6 +311,21 @@ const DRIVER_CHANNEL_KIND = {
   teensyvectordrawing:  'analog',  // vector beam X/Y
   arduinoseat:          'digital', // DX button bits
   teensyewmu:           'digital', // DX button bits
-  pokeys_digital:       'digital', // GPIO pins on/off
-  pokeys_pwm:           'analog',  // PWM duty cycle 0..1
+  // PoKeys mixes kinds: digital pins + PoExtBus relay bits = digital;
+  // PWM channels = analog. Dispatch on the channel string format.
+  pokeys: (channel) => {
+    if (typeof channel === 'string' && channel.startsWith('PWM[')) return 'analog';
+    return 'digital';
+  },
 };
+
+// Resolve the kind for a (driver, channel) pair. Returns null when the
+// driver isn't classified. Wrapper around DRIVER_CHANNEL_KIND that
+// transparently handles both flat-string and per-channel-function
+// entries — call sites should use this rather than indexing directly.
+function getChannelKind(driver, channel) {
+  const entry = DRIVER_CHANNEL_KIND[driver];
+  if (entry == null) return null;
+  if (typeof entry === 'function') return entry(channel);
+  return entry;
+}

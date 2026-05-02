@@ -63,14 +63,7 @@ function parseDriverConfigs(driverConfigs) {
   }
   const pokeys = driverConfigs?.['PoKeysHardwareSupportModule.config'];
   if (pokeys) {
-    // Single parsed object shared by reference between both PoKeys
-    // driver ids. Editor mutations against either p.drivers.pokeys_digital
-    // or p.drivers.pokeys_pwm land in the same devices array, and only
-    // pokeys_digital's save path emits the file (pokeys_pwm carries
-    // skipConfigFile: true in DRIVER_META).
-    const parsed = parsePoKeysConfig(pokeys);
-    out.pokeys_digital = parsed;
-    out.pokeys_pwm = parsed;
+    out.pokeys = parsePoKeysConfig(pokeys);
   }
   // No remaining drivers need passthrough handling — every driver in
   // DRIVER_META either has a structured parser above, or has no per-driver
@@ -1069,6 +1062,8 @@ function parsePoKeysConfig(xmlText) {
     const period = intOr(textOf(childByName(deviceEl, 'PWMPeriodMicroseconds')),
                          POKEYS_DEVICE_DEFAULTS.pwmPeriodMicroseconds);
     if (period > 0) dev.pwmPeriodMicroseconds = period;
+    dev.connectPerWrite = boolOr(textOf(childByName(deviceEl, 'ConnectPerWrite')),
+                                  POKEYS_DEVICE_DEFAULTS.connectPerWrite);
 
     const digOutsEl = childByName(deviceEl, 'DigitalOutputs');
     if (digOutsEl) {
@@ -1078,6 +1073,7 @@ function parsePoKeysConfig(xmlText) {
         if (pin < 1 || pin > 55) continue;
         dev.digitalOutputs.push({
           pin,
+          name: textOf(childByName(outEl, 'Name')),
           invert: boolOr(textOf(childByName(outEl, 'Invert')),
                          POKEYS_DIGITAL_OUTPUT_DEFAULTS.invert),
         });
@@ -1089,7 +1085,24 @@ function parsePoKeysConfig(xmlText) {
         if (outEl.tagName !== 'Output') continue;
         const channel = intOr(textOf(childByName(outEl, 'Channel')), 0);
         if (channel < 1 || channel > 6) continue;
-        dev.pwmOutputs.push({ channel });
+        dev.pwmOutputs.push({
+          channel,
+          name: textOf(childByName(outEl, 'Name')),
+        });
+      }
+    }
+    const extBusOutsEl = childByName(deviceEl, 'PoExtBusOutputs');
+    if (extBusOutsEl) {
+      for (const outEl of extBusOutsEl.children) {
+        if (outEl.tagName !== 'Output') continue;
+        const bit = intOr(textOf(childByName(outEl, 'Bit')), 0);
+        if (bit < 1 || bit > 80) continue;
+        dev.extBusOutputs.push({
+          bit,
+          name: textOf(childByName(outEl, 'Name')),
+          invert: boolOr(textOf(childByName(outEl, 'Invert')),
+                         POKEYS_POEXTBUS_OUTPUT_DEFAULTS.invert),
+        });
       }
     }
     out.devices.push(dev);
@@ -1098,7 +1111,7 @@ function parsePoKeysConfig(xmlText) {
 }
 
 // Backfill any missing PoKeys fields on an already-loaded
-// p.drivers.pokeys_digital entry. Idempotent. Inflates older
+// p.drivers.pokeys entry. Idempotent. Inflates older
 // `{ address }`-only records into the full schema.
 function backfillPoKeysDevices(decl) {
   if (!decl || !Array.isArray(decl.devices)) return;
@@ -1110,15 +1123,32 @@ function backfillPoKeysDevices(decl) {
     if (typeof old.pwmPeriodMicroseconds === 'number' && old.pwmPeriodMicroseconds > 0) {
       dev.pwmPeriodMicroseconds = old.pwmPeriodMicroseconds;
     }
+    if (typeof old.connectPerWrite === 'boolean') dev.connectPerWrite = old.connectPerWrite;
     if (Array.isArray(old.digitalOutputs)) {
       dev.digitalOutputs = old.digitalOutputs
         .filter(o => o && Number.isFinite(o.pin) && o.pin >= 1 && o.pin <= 55)
-        .map(o => ({ pin: o.pin, invert: o.invert !== false }));
+        .map(o => ({
+          pin: o.pin,
+          name: typeof o.name === 'string' ? o.name : '',
+          invert: o.invert !== false,
+        }));
     }
     if (Array.isArray(old.pwmOutputs)) {
       dev.pwmOutputs = old.pwmOutputs
         .filter(o => o && Number.isFinite(o.channel) && o.channel >= 1 && o.channel <= 6)
-        .map(o => ({ channel: o.channel }));
+        .map(o => ({
+          channel: o.channel,
+          name: typeof o.name === 'string' ? o.name : '',
+        }));
+    }
+    if (Array.isArray(old.extBusOutputs)) {
+      dev.extBusOutputs = old.extBusOutputs
+        .filter(o => o && Number.isFinite(o.bit) && o.bit >= 1 && o.bit <= 80)
+        .map(o => ({
+          bit: o.bit,
+          name: typeof o.name === 'string' ? o.name : '',
+          invert: o.invert !== false,
+        }));
     }
     decl.devices[i] = dev;
   }

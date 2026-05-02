@@ -122,33 +122,3 @@ function toggleInstrument(pn) {
   renderEditor();
 }
 
-// ── Active tab ───────────────────────────────────────────────────────────────
-function renderActive() {
-  const pane = document.getElementById('pane-active');
-  if (!pane) return;
-  const p = profiles[activeIdx];
-  if (p.instruments.length === 0) {
-    pane.innerHTML = '<div class="empty">No instruments added. Go to the Instruments tab to add some.</div>';
-    return;
-  }
-  pane.innerHTML = '';
-  p.instruments.forEach(pn => {
-    const inst = INSTRUMENTS.find(i => i.pn === pn);
-    if (!inst) return;
-    const row = document.createElement('div');
-    row.className = 'active-inst-row';
-    const outSigs = [
-      ...inst.analog_out.map(s => `<span class="sig-pill pill-a">${s}</span>`),
-      ...inst.digital_out.map(s => `<span class="sig-pill pill-d">${s}</span>`),
-    ].join('');
-    row.innerHTML = `
-      <div class="active-icon">${pn.replace('10-','').substring(0,5)}</div>
-      <div class="active-info">
-        <div class="active-name">${inst.name}</div>
-        <div class="active-pn">Simtek P/N ${pn} &nbsp;·&nbsp; ${inst.cls.split('.').pop()}</div>
-        <div class="active-sigs">${outSigs}</div>
-      </div>
-      <button class="btn-sm btn-danger" onclick="toggleInstrument('${pn}')">Remove</button>`;
-    pane.appendChild(row);
-  });
-}
