@@ -4,6 +4,7 @@ using PoKeysDevice_DLL;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace SimLinkupCalibrationBridge
@@ -321,6 +322,20 @@ namespace SimLinkupCalibrationBridge
                         }
                         resp["ok"] = true;
                         resp["devices"] = devices;
+                        // Clear the DLL's internal detectedDevicesList
+                        // before returning. EnumeratePoKeysDevices
+                        // populates it via a buggy native marshaller
+                        // that writes the literal byte 0xFF into one
+                        // of the managed reference slots of the
+                        // backing array. Letting it linger means the
+                        // bridge's next GC mark phase walks it and
+                        // AVs in clr!SVR::gc_heap::mark_object_simple1.
+                        // Bridge is small, so it usually doesn't reach
+                        // a Gen 2 collection — but consumers that
+                        // hold the bridge open for a long time and
+                        // call enumerate repeatedly could eventually
+                        // crash it.
+                        ClearDetectedDevicesList(device);
                         return resp;
                     }
                     catch (Exception e)
@@ -367,29 +382,29 @@ namespace SimLinkupCalibrationBridge
                     {
                         testDevice = new PoKeysDevice();
                         // Locate the configured serial in the
-                        // currently-plugged-in set. Fail fast with a
-                        // helpful error if the board isn't reachable —
-                        // most likely cause is "SimLinkup is running
-                        // and holding the connection," but we can't
-                        // tell that apart from "board unplugged" so
-                        // the message covers both.
-                        var found = testDevice.EnumeratePoKeysDevices(true, true, true, 2000);
-                        PoKeysDeviceInfo target = null;
-                        if (found != null)
-                        {
-                            foreach (var info in found)
-                            {
-                                if (info != null && (uint)info.SerialNumber == serialReq)
-                                {
-                                    target = info;
-                                    break;
-                                }
-                            }
-                        }
-                        if (target == null)
-                            return ErrorResp(id, $"PoKeys serial {serialReq} not found on USB or network. Plug it in, or stop SimLinkup if it's currently driving the board.");
-                        if (!testDevice.ConnectToDevice(target))
-                            return ErrorResp(id, $"Could not connect to PoKeys serial {serialReq}. Probably in use by SimLinkup or the PoKeys vendor tool.");
+                        // Connect by serial directly. We deliberately do
+                        // NOT call EnumeratePoKeysDevices here:
+                        // PoKeysDevice_DLL's enumerate populates an
+                        // internal List<PoKeysUSBDeviceObject> via a
+                        // buggy native marshaller that writes the
+                        // literal byte 0xFF into one of the managed
+                        // reference slots of the list's backing
+                        // array. The bad reference sits in the heap;
+                        // the next GC mark phase walks it and AVs in
+                        // clr!SVR::gc_heap::mark_object_simple1.
+                        // Bridge is small + workstation GC so it's
+                        // less likely to trigger, but consumers that
+                        // hold the bridge open across many test calls
+                        // could eventually hit it.
+                        //
+                        // ConnectToDevice(int serial, int checkEthernet)
+                        // also enumerates internally so we still get
+                        // the bad list — clear it via reflection
+                        // immediately after.
+                        // checkEthernet=1: include Ethernet PoKeys.
+                        if (!testDevice.ConnectToDevice((int)serialReq, 1))
+                            return ErrorResp(id, $"PoKeys serial {serialReq} not reachable on USB or Ethernet (unplugged, in use by SimLinkup or the PoKeys vendor tool, or wrong serial).");
+                        ClearDetectedDevicesList(testDevice);
 
                         if (kind == "digital")
                         {
@@ -525,6 +540,35 @@ namespace SimLinkupCalibrationBridge
         // first null are garbage from a stale buffer rather than zeros.
         // C#'s string conversion would otherwise carry that garbage
         // through to JSON and the editor would render mojibake.
+        // Wipe PoKeysDevice.detectedDevicesList via reflection. The
+        // DLL's enumeration code (called both directly via
+        // EnumeratePoKeysDevices and indirectly via ConnectToDevice)
+        // populates this private List<> with results from a buggy
+        // native marshal — one slot of its backing array contains
+        // the literal byte 0xFF instead of a managed object reference.
+        // Replacing the list with a fresh empty one makes the corrupt
+        // backing array unrooted; the next GC collects it. Same
+        // workaround as SimLinkup's PoKeys HSM (see
+        // jc-lightningstools commit b590f7e for the full forensics).
+        private static readonly FieldInfo _detectedDevicesListField =
+            typeof(PoKeysDevice).GetField("detectedDevicesList",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+
+        private static void ClearDetectedDevicesList(PoKeysDevice device)
+        {
+            if (device == null || _detectedDevicesListField == null) return;
+            try
+            {
+                _detectedDevicesListField.SetValue(device, new List<PoKeysUSBDeviceObject>());
+            }
+            catch
+            {
+                // Best-effort. Worst case the corrupt array stays in
+                // heap; bridge process is small + workstation GC, so
+                // unlikely to crash before next process restart.
+            }
+        }
+
         private static string SanitizeDeviceString(string raw)
         {
             if (string.IsNullOrEmpty(raw)) return "";
