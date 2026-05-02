@@ -31,6 +31,15 @@
 // branch simlinkup-editor-support for the matching HSM patch.
 const GAUGE_CONFIG_FILENAME_OVERRIDES = {
   'HenkieF16FuelFlow': 'HenkieF16FuelFlowHardwareSupportModule.config',
+  // Henk F-16 HSI boards: the legacy config file is already named
+  // HenkF16HSIBoard{N}HardwareSupportModule.config (the auto-derivation
+  // target). To avoid the editor overwriting that file's identity /
+  // stator / DIG_OUT settings, the unified calibration file uses a
+  // distinct name. Same split-file contract as FuelFlow above. See
+  // src/SimLinkup/HardwareSupport/Henk/HSI/Board{N}/HenkF16HSIBoard{N}
+  // CalibrationConfig.cs in the lightningstools tree.
+  'Henk_F16_HSI_Board1': 'HenkF16HSIBoard1Calibration.config',
+  'Henk_F16_HSI_Board2': 'HenkF16HSIBoard2Calibration.config',
 };
 
 // Build the file basename for a gauge from its catalog `cls`. Returns null
