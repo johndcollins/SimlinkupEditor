@@ -1394,6 +1394,43 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
              ${renderTrimFieldsBlock(pn, tplCh.id, liveCh, /*compact*/ false)}
            </div>`
         : ''}
+      ${tplCh.supportsHiddenOutput
+        ? renderHiddenOutputBlock(pn, tplCh, liveCh, meta)
+        : ''}
+    </div>`;
+}
+
+// Hidden-output input — for analog channels gated by a digital visibility
+// flag (today: Henk F-16 ADI Support Board's two command bars; flag is the
+// commandBarsVisible input). When the flag is FALSE the gauge HSM drives
+// the channel to this value instead of evaluating the breakpoint table.
+// Defaults from the gauge template (e.g. horizontal bar = 1.0, vertical
+// bar = 0.0 for Henk ADI — match the C# hardcoded park positions).
+function renderHiddenOutputBlock(pn, tplCh, liveCh, meta) {
+  const fallback = (typeof tplCh.hiddenOutput === 'number') ? tplCh.hiddenOutput : 0;
+  const value = (typeof liveCh.hiddenOutput === 'number') ? liveCh.hiddenOutput : fallback;
+  const valStr = formatNum(value);
+  const step = meta.step || 'any';
+  return `
+    <div class="cal-hidden-output">
+      <div class="cal-help-text">
+        <strong>Hidden output</strong> — value driven when the gauge's
+        visibility flag is OFF (the breakpoint table above is bypassed).
+        Default ${formatNum(fallback)} matches the bench-stock park
+        position; override if your specific board needs a different
+        value to push the bar fully off-screen.
+      </div>
+      <label class="cal-trim-field">
+        <span>${escHtml(meta.label)} when hidden</span>
+        <div class="cal-trim-controls">
+          <input type="range" min="${meta.min}" max="${meta.max}" step="${step}" value="${value}"
+                 oninput="setCalibrationHiddenOutputLive('${escHtml(pn)}','${escHtml(tplCh.id)}',this.value)"
+                 title="Drag to set the hidden-state output value."/>
+          <input type="number" step="any" min="${meta.min}" max="${meta.max}" value="${valStr}"
+                 onchange="setCalibrationHiddenOutput('${escHtml(pn)}','${escHtml(tplCh.id)}',this.value)"
+                 title="Hidden-state output (clamped to ${meta.min}..${meta.max} by the gauge HSM)."/>
+        </div>
+      </label>
     </div>`;
 }
 
@@ -2437,6 +2474,38 @@ function setCalibrationTrimLive(pn, channelId, field, value) {
   if (num && document.activeElement !== num) {
     num.value = formatTrimNum(n);
   }
+  refreshGaugeSaveButtons(pn);
+  scheduleAutoSaveDebounced(pn);
+}
+
+// Hidden-output number-input handler (commit-on-change). Updates the
+// model and triggers an immediate auto-save. Used by Henk F-16 ADI
+// Support Board's command bar channels — see renderHiddenOutputBlock.
+function setCalibrationHiddenOutput(pn, channelId, value) {
+  const p = profiles[activeIdx];
+  const entry = ensureGaugeEntry(p, pn);
+  if (!entry) return;
+  const ch = entry.channels.find(c => c.id === channelId);
+  if (!ch) return;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return;
+  ch.hiddenOutput = n;
+  renderCalibration();
+  autoSaveImmediate(pn);
+}
+
+// Hidden-output slider drag handler. Updates the model AND the sibling
+// number input AND nothing else (no full re-render so focus stays on the
+// slider). Mirrors setCalibrationTrimLive.
+function setCalibrationHiddenOutputLive(pn, channelId, value) {
+  const p = profiles[activeIdx];
+  const entry = ensureGaugeEntry(p, pn);
+  if (!entry) return;
+  const ch = entry.channels.find(c => c.id === channelId);
+  if (!ch) return;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return;
+  ch.hiddenOutput = n;
   refreshGaugeSaveButtons(pn);
   scheduleAutoSaveDebounced(pn);
 }

@@ -249,6 +249,18 @@ function renderGaugeConfigXml(pn, entry) {
       if (typeof cagedMax === 'number') {
         lines.push(`      <CagedRestRangeMaxDegrees>${formatNum(cagedMax)}</CagedRestRangeMaxDegrees>`);
       }
+
+      // HiddenOutput: value driven when a digital visibility flag inhibits
+      // this analog channel. Only meaningful for channels whose template
+      // declares supportsHiddenOutput (today: Henk F-16 ADI Support Board's
+      // two command bars). Emit when the user has set or accepted a value;
+      // the C# HSM falls back to its hardcoded park position when absent.
+      const hiddenOutput = (typeof ch.hiddenOutput === 'number')
+        ? ch.hiddenOutput
+        : tplCh.hiddenOutput;
+      if (typeof hiddenOutput === 'number') {
+        lines.push(`      <HiddenOutput>${formatNum(hiddenOutput)}</HiddenOutput>`);
+      }
     }
     lines.push('    </Channel>');
   }
@@ -521,6 +533,13 @@ function parseGaugeConfigXml(xmlText, pn) {
     const cagedMinRaw = cagedMinEl ? Number((cagedMinEl.textContent || '').trim()) : NaN;
     const cagedMaxRaw = cagedMaxEl ? Number((cagedMaxEl.textContent || '').trim()) : NaN;
 
+    // HiddenOutput field for flag-gated analog channels. Absent on every
+    // gauge except Henk F-16 ADI Support Board's two command bars.
+    const hiddenOutputEl = el.querySelector(':scope > HiddenOutput');
+    const hiddenOutputRaw = hiddenOutputEl
+      ? Number((hiddenOutputEl.textContent || '').trim())
+      : NaN;
+
     const parsed = {
       id: tplCh.id,
       kind,
@@ -542,6 +561,7 @@ function parseGaugeConfigXml(xmlText, pn) {
     if (typeof cagedRestEnabled === 'boolean') parsed.cagedRestEnabled = cagedRestEnabled;
     if (Number.isFinite(cagedMinRaw)) parsed.cagedRestRangeMinDegrees = cagedMinRaw;
     if (Number.isFinite(cagedMaxRaw)) parsed.cagedRestRangeMaxDegrees = cagedMaxRaw;
+    if (Number.isFinite(hiddenOutputRaw)) parsed.hiddenOutput = hiddenOutputRaw;
     out.channels.push(parsed);
   }
 

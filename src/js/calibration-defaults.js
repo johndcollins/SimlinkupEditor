@@ -178,6 +178,11 @@ function cloneGaugeCalibrationDefault(pn) {
       if (typeof ch.cagedRestEnabled === 'boolean') cloned.cagedRestEnabled = ch.cagedRestEnabled;
       if (typeof ch.cagedRestRangeMinDegrees === 'number') cloned.cagedRestRangeMinDegrees = ch.cagedRestRangeMinDegrees;
       if (typeof ch.cagedRestRangeMaxDegrees === 'number') cloned.cagedRestRangeMaxDegrees = ch.cagedRestRangeMaxDegrees;
+      // HiddenOutput — value driven when the channel's visibility flag
+      // is OFF. Today only Henk F-16 ADI Support Board's command bars
+      // declare this on their template; carried verbatim so reset-to-
+      // defaults restores the spec-sheet park position.
+      if (typeof ch.hiddenOutput === 'number') cloned.hiddenOutput = ch.hiddenOutput;
       return cloned;
     }),
   };
@@ -259,6 +264,10 @@ function gaugeCalibrationIsEdited(pn, entry) {
     }
     if (typeof t.cagedRestRangeMaxDegrees === 'number' || typeof e.cagedRestRangeMaxDegrees === 'number') {
       if (!eq(e.cagedRestRangeMaxDegrees ?? t.cagedRestRangeMaxDegrees ?? 0, t.cagedRestRangeMaxDegrees ?? 0)) return true;
+    }
+    // Hidden-output drift (Henk F-16 ADI Support Board command bars).
+    if (typeof t.hiddenOutput === 'number' || typeof e.hiddenOutput === 'number') {
+      if (!eq(e.hiddenOutput ?? t.hiddenOutput ?? 0, t.hiddenOutput ?? 0)) return true;
     }
   }
   return false;
