@@ -1,6 +1,6 @@
 {
   "name": "simlinkup-profile-editor",
-  "version": "1.0.12",
+  "version": "1.0.14",
   "author": "SimLinkup",
   "description": "SimLinkup profile editor — create and manage custom mapping profiles with Simtek instruments",
   "main": "main.js",

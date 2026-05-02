@@ -73,10 +73,21 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
             // Read existing shared memory (if any) so subsequent
             // WriteSignals calls preserve fields the user isn't actively
             // editing. If no shared memory exists yet, fall back to zeroed
-            // structs. We deliberately do NOT flush anything to memory on
-            // open — writes only happen when the user moves a slider.
+            // structs.
             _flightData = ReadCurrentPrimaryOrZero();
             _flightData2 = ReadCurrentSecondaryOrZero();
+            // Flush BOTH structs immediately so the primary AND secondary
+            // MMFs exist as soon as the session opens. SimLinkup's
+            // F4SimSupportModule treats "no primary MMF" as "Falcon not
+            // running" and ignores the secondary MMF entirely in that
+            // case (Reader.IsFalconRunning gates on the primary handle).
+            // Without this, secondary-only edits (HYD pressure, altimeter
+            // aauz, cabin altitude, etc.) appear to do nothing until the
+            // user happens to also touch a primary signal, which is the
+            // moment the primary MMF gets created and SimLinkup starts
+            // reading both areas.
+            FlushPrimary();
+            FlushSecondary();
             _sessionOpen = true;
         }
 
