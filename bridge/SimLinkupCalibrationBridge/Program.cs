@@ -543,13 +543,37 @@ namespace SimLinkupCalibrationBridge
         // Wipe PoKeysDevice.detectedDevicesList via reflection. The
         // DLL's enumeration code (called both directly via
         // EnumeratePoKeysDevices and indirectly via ConnectToDevice)
-        // populates this private List<> with results from a buggy
-        // native marshal — one slot of its backing array contains
-        // the literal byte 0xFF instead of a managed object reference.
-        // Replacing the list with a fresh empty one makes the corrupt
-        // backing array unrooted; the next GC collects it. Same
-        // workaround as SimLinkup's PoKeys HSM (see
-        // jc-lightningstools commit b590f7e for the full forensics).
+        // populates this private List<> via native USB enumeration.
+        //
+        // Original symptom: after a Gen 2 compacting GC, AV in
+        // clr!SVR::gc_heap::mark_object_simple1 — one slot of the
+        // list's backing array carried a "reference" whose tag bytes
+        // pointed to address 0xFF, so the GC's mark walker crashed
+        // dereferencing a MethodTable at [0xFF + 0x478].
+        //
+        // Per PoLabs (the DLL vendor): the library is NOT thread-safe.
+        // detectedDevicesList and the connection/handle state are
+        // not guarded against concurrent access, and several call
+        // sites mutate the list while it can be iterated elsewhere.
+        // The 0xFF in the backing slot is the symptom of a torn write
+        // during List.Add's grow path racing with another thread
+        // reading or mutating the same list. Surfaces dormantly
+        // because reads of the corrupt slot don't fault — only the
+        // next compacting GC traversal does.
+        //
+        // The bridge itself is single-threaded on its JSON-RPC
+        // dispatcher (synchronous request handler, no Task.Run /
+        // ThreadPool / async), so we shouldn't be triggering the
+        // race here. We still wipe the list defensively: even if
+        // a future code change introduces concurrency, throwing
+        // away the backing array after each operation makes any
+        // corrupted slot unrooted so the next GC collects it.
+        //
+        // Same workaround as SimLinkup's PoKeys HSM (see
+        // jc-lightningstools commit b590f7e for the original
+        // forensics; the SimLinkup HSM is multi-threaded and needs
+        // additional locking around all PoKeysDevice access to
+        // properly fix the upstream race).
         private static readonly FieldInfo _detectedDevicesListField =
             typeof(PoKeysDevice).GetField("detectedDevicesList",
                 BindingFlags.Instance | BindingFlags.NonPublic);
