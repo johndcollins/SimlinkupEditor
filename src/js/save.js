@@ -691,10 +691,17 @@ function generateMappingFiles(p) {
   // Nigel's Malwin 19581 hydraulic pressure A + B).
   const captured = p.mappingFilesByPn || {};
 
+  // DIAGNOSTIC: log what generateMappingFiles is doing so we can chase
+  // gauges that show up in the registry but never get a .mapping file.
+  // Remove once the 10-1088 issue is understood.
+  console.log('[generateMappingFiles] p.instruments =', JSON.stringify(p.instruments));
+  console.log('[generateMappingFiles] byGauge keys =', [...byGauge.keys()]);
+  console.log('[generateMappingFiles] captured keys =', Object.keys(captured));
   // One or more files per gauge that has edges.
   for (const [pn, edges] of byGauge) {
     const inst = INSTRUMENTS.find(i => i.pn === pn);
     const legacyFiles = captured[pn] && captured[pn].length ? captured[pn] : null;
+    console.log(`[generateMappingFiles] byGauge ${pn}: edges=${edges.length} inst=${inst ? 'found' : 'NULL'} legacyFiles=${legacyFiles ? legacyFiles.map(f => f.filename).join(',') : 'none'}`);
     if (legacyFiles) {
       // Distribute the gauge's edges across the legacy files based on
       // port-name matching. New ports (not in any legacy file) go into
@@ -730,10 +737,11 @@ function generateMappingFiles(p) {
   // initialisation still has the registered modules visible to operators
   // browsing the profile folder. (Empty mapping files are harmless.)
   for (const pn of p.instruments) {
-    if (byGauge.has(pn)) continue;
+    if (byGauge.has(pn)) { console.log(`[generateMappingFiles] unwired skip ${pn} (already in byGauge)`); continue; }
     const inst = INSTRUMENTS.find(i => i.pn === pn);
-    if (!inst) continue;
+    if (!inst) { console.log(`[generateMappingFiles] unwired skip ${pn} (NOT FOUND in INSTRUMENTS catalog)`); continue; }
     const legacyFiles = captured[pn] && captured[pn].length ? captured[pn] : null;
+    console.log(`[generateMappingFiles] unwired ${pn}: legacyFiles=${legacyFiles ? legacyFiles.map(f => f.filename).join(',') : 'none'}`);
     if (legacyFiles) {
       // Preserve every legacy file as empty so the sweep doesn't delete it.
       for (const f of legacyFiles) {
