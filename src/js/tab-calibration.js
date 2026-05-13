@@ -758,7 +758,14 @@ function renderLiveCalibration(pn) {
   // chain end-to-end. Without this check, a user with only the input wired
   // would start a session, scrub the slider, and see nothing move — and
   // not know why.
-  const outputsWired = (inst.outputGroups || []).some(group =>
+  //
+  // Self-driven gauges (Henk HSI Board 1 / Board 2 today — their C# HSMs
+  // talk to the indicator over USB directly, no stage-2 edge to wire)
+  // declare an empty outputGroups in instruments.json. For those, the
+  // output-side wiring lives inside the HSM, not the profile, so the
+  // gating check above doesn't apply — treat them as always output-wired.
+  const groups = inst.outputGroups || [];
+  const outputsWired = groups.length === 0 || groups.some(group =>
     (group.ports || []).some(portTpl => {
       const e = (p.chain?.edges || []).find(x =>
         x.stage === 2 && x.srcGaugePn === pn && x.srcGaugePort === portTpl.port
