@@ -498,11 +498,10 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                 // clamp course deviation. When zero, ANY non-zero course
                 // deviation collapses to zero via Math.Sign(cd)*0, so the
                 // bridge-driven CDI stays centered. We expose this signal
-                // both directly (so the user can drive the limit slider
-                // in live cal) and as a side-effect of writing course
-                // deviation (when limit is 0, seed it to 10° so a single-
-                // slider workflow works without the user knowing about
-                // the limit).
+                // directly (so the user can drive the limit slider in live
+                // cal). Writing course deviation also auto-seeds the limit
+                // to 10° when zero — without that single-slider workflow,
+                // the user would have to know to write the limit first.
                 // F4_ADI__RATE_OF_TURN_INDICATOR_POSITION is derived by the
                 // upstream IndicatedRateOfTurnCalculator (filtered yaw
                 // rate over time), not invertible from a slider value.
@@ -544,15 +543,27 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                     fd.AdiIlsHorPos = (float)(value * 5.0 / DEGREES_PER_RADIAN);
                     return Routing.Primary;
                 case "F4_HSI__COURSE_DEVIATION_DEGREES":
-                    // F4SimSupportModule applies a sign-flip on read (see
-                    // UpdateHsiData: returns -cd for |cd| < 90). Compensate
-                    // so a slider value of +5 surfaces as +5 in SimLinkup.
-                    fd.courseDeviation = (float)(-value);
-                    // Side-effect: seed deviationLimit to 10° if currently
-                    // zero so the clamp in F4SimSupportModule doesn't zero
-                    // the CDI deflection. The user can still drive the
-                    // limit slider directly to override.
-                    if (fd.deviationLimit == 0f) fd.deviationLimit = 10f;
+                    {
+                        // The editor's live-cal slider for this signal
+                        // speaks NORMALIZED deviation (-1..+1) so it matches
+                        // the breakpoint table's input axis on the HSI CDI
+                        // gauge. The bridge translates back to F4's native
+                        // raw-degrees field by scaling against the current
+                        // deviation limit (degrees). F4SimSupportModule.
+                        // UpdateHsiData also sign-flips on read (returns
+                        // -cd for |cd|<90), so we pre-negate.
+                        //
+                        // Auto-seed deviationLimit to 10° when zero. The
+                        // sim normally publishes a limit between ~2.5°
+                        // and 10° depending on nav mode; with limit=0,
+                        // SimLinkup's clamp `Math.Sign(cd) * (limit % 180)`
+                        // zeros every non-zero deviation, so the CDI stays
+                        // centered. The user can still write the limit
+                        // signal directly to override.
+                        if (fd.deviationLimit == 0f) fd.deviationLimit = 10f;
+                        var rawDegrees = value * fd.deviationLimit;
+                        fd.courseDeviation = (float)(-rawDegrees);
+                    }
                     return Routing.Primary;
                 case "F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES":
                     // F4SimSupportModule reads `fd.deviationLimit % 180`,
@@ -685,10 +696,17 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                 case "F4_ADI__ILS_VERTICAL_BAR_POSITION":
                     value = fd.AdiIlsHorPos * DEGREES_PER_RADIAN / 5.0; return true;
                 case "F4_HSI__COURSE_DEVIATION_DEGREES":
-                    // Mirrors the write-path sign flip so a read-after-write
-                    // round-trips: bridge wrote `-value` to fd.courseDeviation,
-                    // read negates back to recover the user's value.
-                    value = -fd.courseDeviation; return true;
+                    {
+                        // Mirrors the write-path: bridge wrote
+                        //   fd.courseDeviation = -(normalized * limit)
+                        // so read recovers
+                        //   normalized = -fd.courseDeviation / limit
+                        // (divisor protected against the zero-limit case
+                        // the same way F4SimSupportModule's clamp does).
+                        var lim = fd.deviationLimit != 0f ? fd.deviationLimit : 10f;
+                        value = -fd.courseDeviation / lim;
+                    }
+                    return true;
                 case "F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES":
                     value = fd.deviationLimit; return true;
                 case "F4_HSI__DESIRED_COURSE_DEGREES":
