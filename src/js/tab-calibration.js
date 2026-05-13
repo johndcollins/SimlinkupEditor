@@ -615,6 +615,7 @@ function inferSignalRange(signalId, label) {
     'F4_ADI__ILS_HORIZONTAL_BAR_POSITION':                      { min:   -1, max:     1, units: '' },
     'F4_ADI__ILS_VERTICAL_BAR_POSITION':                        { min:   -1, max:     1, units: '' },
     'F4_HSI__COURSE_DEVIATION_DEGREES':                         { min:  -10, max:    10, units: '°' },
+    'F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES':                   { min:  -10, max:    10, units: '°' },
     'F4_HSI__DESIRED_COURSE_DEGREES':                           { min:    0, max:   360, units: '°' },
     'F4_HSI__BEARING_TO_BEACON_DEGREES':                        { min:    0, max:   360, units: '°' },
     'F4_HSI__CURRENT_HEADING_DEGREES':                          { min:    0, max:   360, units: '°' },
