@@ -673,6 +673,27 @@ const _liveCalibration = {};
 let _liveCalibrationActiveSim = null;
 let _liveCalibrationActivePn = null;
 
+// Per-channel view-mode toggle for piecewise editors. Keyed by `${pn}|${channelId}`.
+// Values: 'testpoint' (default, simpler workflow) or 'table' (the
+// breakpoint-by-breakpoint editor for power users). Survives re-renders
+// within a session but is intentionally not persisted to disk — the user's
+// preferred view is a UI choice, not a profile concern.
+const _calibrationViewMode = new Map();
+function getCalibrationViewMode(pn, channelId) {
+  return _calibrationViewMode.get(`${pn}|${channelId}`) || 'testpoint';
+}
+function setCalibrationViewMode(pn, channelId, mode) {
+  if (mode !== 'testpoint' && mode !== 'table') return;
+  _calibrationViewMode.set(`${pn}|${channelId}`, mode);
+  renderCalibration();
+}
+
+// Per-channel test-point state. The user types "what does your gauge actually
+// read at the current sim input?" into this field; Apply correction reads it
+// to compute the breakpoint nudge. Keyed by `${pn}|${channelId}`. Cleared
+// after a successful Apply so the field reflects "no pending correction."
+const _calibrationTestPointReading = new Map();
+
 function renderLiveCalibration(pn) {
   const p = profiles[activeIdx];
   const inst = INSTRUMENTS.find(i => i.pn === pn);
@@ -1363,6 +1384,55 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
     </div>`;
   }).join('');
 
+  // View-mode toggle: "Calibrate at test points" (default, simpler) vs.
+  // "Breakpoint table" (power-user direct edit). Persisted in
+  // _calibrationViewMode keyed by `${pn}|${channelId}`.
+  //
+  // DAC-output channels (Henkie family, raw DAC values) skip the test-point
+  // view because the math assumes ±10 V scale + a needle-style readout —
+  // the test-point UX doesn't generalise cleanly to raw-DAC channels yet,
+  // and those gauges are rare enough that forcing the table view is fine.
+  // Cross-coupled channels (Mach reference voltage feeding the airspeed-
+  // coupled wheel math) DO get the test-point view: the inverse-coupling
+  // math happens to reduce to the same slope-based correction as the
+  // non-coupled case (see applyCalibrationCorrection comments), with a
+  // banner reminding the user to calibrate the coupled-from channel first.
+  const isTestPointEligible = meta.unit === 'volts';
+  const viewMode = isTestPointEligible
+    ? getCalibrationViewMode(pn, tplCh.id)
+    : 'table';
+
+  const viewToggle = isTestPointEligible
+    ? `<div class="cal-view-toggle">
+         <button class="cal-btn cal-view-toggle-btn ${viewMode === 'testpoint' ? 'is-active' : ''}"
+                 onclick="setCalibrationViewMode('${escHtml(pn)}','${escHtml(tplCh.id)}','testpoint')"
+                 title="Drive the gauge at a test point, type what the gauge actually reads, click Apply correction. The editor adjusts the breakpoint for you.">Calibrate at test points</button>
+         <button class="cal-btn cal-view-toggle-btn ${viewMode === 'table' ? 'is-active' : ''}"
+                 onclick="setCalibrationViewMode('${escHtml(pn)}','${escHtml(tplCh.id)}','table')"
+                 title="Edit the breakpoint table directly — for users who already know the volts/output curve they need.">Breakpoint table</button>
+       </div>`
+    : '';
+
+  const body = viewMode === 'testpoint'
+    ? renderTestPointCalibrationView(pn, channelIdx, tplCh, liveCh, meta)
+    : `<div class="cal-curve-wrap">
+         <svg class="cal-curve-svg" id="cal-curve-${channelKey}"
+              viewBox="0 0 400 140"
+              xmlns="http://www.w3.org/2000/svg">
+           ${renderCalibrationCurveSvg(bps, meta)}
+         </svg>
+       </div>
+       <div class="calibration-bp-table">
+         ${headerRow}
+         ${rows}
+       </div>
+       <div class="calibration-bp-actions">
+         <button class="cal-btn cal-btn-accent" onclick="addCalibrationBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}')">+ Add breakpoint</button>
+         <button class="cal-btn"
+                 onclick="sortCalibrationBreakpoints('${escHtml(pn)}','${escHtml(tplCh.id)}')"
+                 title="Reorder rows by input value, ascending. Useful after inserting a breakpoint that belongs in the middle of the curve.">Sort by input ↑</button>
+       </div>`;
+
   return `
     <div class="calibration-channel-section">
       <div class="calibration-channel-head">
@@ -1372,23 +1442,8 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
       </div>
       ${warningBanner}
       ${coupledBanner}
-      <div class="cal-curve-wrap">
-        <svg class="cal-curve-svg" id="cal-curve-${channelKey}"
-             viewBox="0 0 400 140"
-             xmlns="http://www.w3.org/2000/svg">
-          ${renderCalibrationCurveSvg(bps, meta)}
-        </svg>
-      </div>
-      <div class="calibration-bp-table">
-        ${headerRow}
-        ${rows}
-      </div>
-      <div class="calibration-bp-actions">
-        <button class="cal-btn cal-btn-accent" onclick="addCalibrationBreakpoint('${escHtml(pn)}','${escHtml(tplCh.id)}')">+ Add breakpoint</button>
-        <button class="cal-btn"
-                onclick="sortCalibrationBreakpoints('${escHtml(pn)}','${escHtml(tplCh.id)}')"
-                title="Reorder rows by input value, ascending. Useful after inserting a breakpoint that belongs in the middle of the curve.">Sort by input ↑</button>
-      </div>
+      ${viewToggle}
+      ${body}
       ${meta.unit === 'volts'
         ? `<div class="calibration-trim-grid">
              ${renderTrimFieldsBlock(pn, tplCh.id, liveCh, /*compact*/ false)}
@@ -1398,6 +1453,362 @@ function renderPiecewiseChannelEditor(pn, channelIdx, tplCh, liveCh) {
         ? renderHiddenOutputBlock(pn, tplCh, liveCh, meta)
         : ''}
     </div>`;
+}
+
+// Derive the input port name a piecewise output channel reads from. The
+// editor's port-naming convention is symmetric: an output named
+// "<gauge-digits>_X_To_Instrument" reads from an input "X_From_Sim".
+// Channels that don't follow this convention (the Mach reference voltage
+// reads from Mach_From_Sim, etc.) all happen to match — there's no gauge
+// today where an output port's "name part" doesn't match its input.
+// Returns null if the convention doesn't apply (e.g. cross-coupled channels
+// where the editor wouldn't render test-point view anyway).
+function inputPortForOutputChannelId(channelId) {
+  if (!channelId) return null;
+  // Strip the "<digits>_" prefix and the "_To_Instrument" suffix.
+  const m = /^[A-Za-z0-9]+_(.+?)_To_Instrument$/.exec(channelId);
+  if (!m) return null;
+  return `${m[1]}_From_Sim`;
+}
+
+// Find the wired live-cal entry for a gauge port. Returns the
+// `{ simSignalId, min, max, units, sim }` record for the slider that
+// drives this gauge's input, or null if the input isn't wired end-to-end
+// in the current profile. Mirrors the wired-edge discovery in
+// renderLiveCalibration.
+function findWiredInputForGaugePort(pn, gaugePort) {
+  const p = profiles[activeIdx];
+  if (!p || !p.chain) return null;
+  const inst = INSTRUMENTS.find(i => i.pn === pn);
+  if (!inst) return null;
+  const edge = (p.chain.edges || []).find(e =>
+    e.stage === 1 && e.dstGaugePn === pn && e.dstGaugePort === gaugePort
+  );
+  if (!edge) return null;
+  // Build a minimal record. The range is inferred from the gauge's own
+  // calibration template when available (matches what renderLiveCalibration
+  // does); falls back to the signal-id table otherwise.
+  const range = gaugeInputRange(pn, gaugePort)
+    || inferSignalRange(edge.src, '');
+  const sim = (p.simSupports || []).find(s => {
+    const sigs = SIM_SIGNALS[s];
+    if (!sigs) return false;
+    const sId = (edge.src || '').replace(/\[\d+\]$/, '');
+    return (sigs.scalar || []).some(x => x.id === sId)
+        || (sigs.indexed || []).some(x => x.id === sId);
+  }) || (p.simSupports && p.simSupports[0]) || null;
+  return {
+    simSignalId: edge.src,
+    min: range.min, max: range.max, units: range.units || '',
+    sim,
+  };
+}
+
+// Test-point calibration view — the simpler alternative to the breakpoint
+// table for piecewise volts channels. Workflow:
+//   1. User starts live calibration (existing mechanism at the top of the
+//      gauge card).
+//   2. User drags THIS view's slider to a test point (e.g. 300 kt). The
+//      slider mirrors the live-cal panel's slider — both write to the
+//      same `_liveCalibration[pn].sliderValues[simSignalId]` state.
+//   3. User reads the physical gauge and types what it shows.
+//   4. Click Apply correction — editor adjusts the breakpoint matching
+//      the current slider value (or inserts a new one if no breakpoint
+//      is within tolerance) so the gauge will read what the user wants.
+//
+// Requires live cal to be active for this gauge. Otherwise renders a hint
+// + "Start live calibration" hand-off. The user can still see the slider
+// position even when live cal isn't running — it just doesn't write to the
+// sim.
+function renderTestPointCalibrationView(pn, channelIdx, tplCh, liveCh, meta) {
+  const inputPort = inputPortForOutputChannelId(tplCh.id);
+  if (!inputPort) {
+    return `<div class="cal-help-text" style="padding:12px">
+      The test-point workflow can't infer the input port for this channel.
+      Switch to <strong>Breakpoint table</strong> mode and edit the curve directly.
+    </div>`;
+  }
+  const wired = findWiredInputForGaugePort(pn, inputPort);
+  if (!wired) {
+    return `<div class="cal-help-text" style="padding:12px">
+      <strong>Test-point calibration needs the input wired to a sim signal.</strong>
+      Open the <em>Signal Mappings</em> tab and wire this gauge's
+      <code>${escHtml(inputPort)}</code> input to a source signal first.
+      You can still use <strong>Breakpoint table</strong> mode to edit the
+      curve directly without live cal.
+    </div>`;
+  }
+
+  // Slider state: shared with the live-cal panel at the top of the gauge
+  // card. Both surfaces drive the same _liveCalibration[pn] entry, so
+  // dragging here updates the panel's slider and vice versa (the slider's
+  // oninput handler walks DOM siblings to find the matched pair).
+  const state = _liveCalibration[pn] || { sliderValues: {} };
+  const sliderValue = (typeof state.sliderValues[wired.simSignalId] === 'number')
+    ? state.sliderValues[wired.simSignalId]
+    : Math.max(wired.min, Math.min(wired.max, 0));
+  const step = ((wired.max - wired.min) / 1000) || 1;
+  const rangeText = `${formatNum(wired.min)} – ${formatNum(wired.max)}${wired.units ? ' ' + wired.units : ''}`;
+
+  const isActive = _liveCalibrationActivePn === pn;
+  const readingKey = `${pn}|${tplCh.id}`;
+  const readingValue = _calibrationTestPointReading.get(readingKey);
+  const readingStr = (typeof readingValue === 'number') ? formatNum(readingValue) : '';
+
+  const startBanner = isActive ? '' : `
+    <div class="cal-test-point-warning">
+      Live calibration isn't active — the slider below won't drive the
+      gauge until you click <em>Start live calibration</em> at the top of
+      this gauge's card. Without it, the editor can compute the breakpoint
+      adjustment but you won't see your physical gauge respond.
+    </div>`;
+
+  // Cross-coupling reminder: when this channel depends on another (e.g.
+  // 10-1082 Mach reading depends on the airspeed channel's calibration),
+  // a wrong reading here could be caused by either an off Mach table OR
+  // an off airspeed table. Calibrating the upstream channel first is the
+  // honest order. Show this in-line in the test-point view so the user
+  // sees it before applying corrections.
+  const coupledTo = liveCh.coupledTo || tplCh.coupledTo;
+  const couplingBanner = coupledTo
+    ? `<div class="cal-test-point-warning">
+         <strong>This reading depends on <code>${escHtml(coupledTo)}</code>.</strong>
+         Calibrate that channel first — if its needle is off, the value
+         shown here will be off too, and corrections you apply now will
+         fight whatever you fix upstream later. Use the live-cal sliders
+         at the top of this card to set <em>both</em> channels to a known
+         flight condition before applying a correction here.
+       </div>`
+    : '';
+
+  // The "apply correction" button gates on having a typed reading that
+  // differs from the slider's input. We still render it always — disabled
+  // state makes the workflow visible.
+  const hasReading = typeof readingValue === 'number' && Number.isFinite(readingValue);
+  const canApply = hasReading && Math.abs(readingValue - sliderValue) > 1e-9;
+
+  return `
+    <div class="cal-test-point">
+      ${startBanner}
+      ${couplingBanner}
+      <div class="cal-test-point-step">
+        <div class="cal-test-point-step-num">1</div>
+        <div class="cal-test-point-step-body">
+          <div class="cal-test-point-step-title">Drive the gauge at a test point</div>
+          <div class="cal-test-point-step-hint">
+            Drag the slider (or type a value). Range: ${escHtml(rangeText)}.
+          </div>
+          <div class="cal-test-point-slider-row">
+            <input type="range"
+                   min="${formatNum(wired.min)}" max="${formatNum(wired.max)}" step="${step}"
+                   value="${formatNum(sliderValue)}"
+                   oninput="setLiveCalibrationSlider('${escHtml(pn)}','${escHtml(wired.simSignalId)}',this.value,this)"/>
+            <input type="number" class="cal-test-point-input-num"
+                   value="${formatNum(sliderValue)}"
+                   oninput="setLiveCalibrationSlider('${escHtml(pn)}','${escHtml(wired.simSignalId)}',this.value,this)"/>
+            <span class="cal-test-point-units">${escHtml(wired.units || '')}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cal-test-point-step">
+        <div class="cal-test-point-step-num">2</div>
+        <div class="cal-test-point-step-body">
+          <div class="cal-test-point-step-title">What does the gauge actually read?</div>
+          <div class="cal-test-point-step-hint">
+            Look at the physical gauge and type the value it's showing. If
+            the gauge reads exactly what step 1 says, leave this blank and
+            move to a different test point — no correction needed at this
+            input value.
+          </div>
+          <div class="cal-test-point-reading-row">
+            <input type="number" class="cal-test-point-reading"
+                   value="${escHtml(readingStr)}"
+                   placeholder="e.g. ${formatNum(sliderValue)}"
+                   oninput="setCalibrationTestPointReading('${escHtml(pn)}','${escHtml(tplCh.id)}',this.value)"/>
+            <span class="cal-test-point-units">${escHtml(wired.units || '')}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="cal-test-point-step">
+        <div class="cal-test-point-step-num">3</div>
+        <div class="cal-test-point-step-body">
+          <div class="cal-test-point-step-title">Apply the correction</div>
+          <div class="cal-test-point-step-hint">
+            Adjusts the breakpoint at <strong>${formatNum(sliderValue)}${wired.units ? ' ' + wired.units : ''}</strong>
+            (inserts a new one if no breakpoint matches) so the gauge will
+            read what you typed. Switch to <em>Breakpoint table</em> mode
+            anytime to see the resulting curve.
+          </div>
+          <div class="cal-test-point-apply-row">
+            <button class="cal-btn cal-btn-accent" ${canApply ? '' : 'disabled'}
+                    onclick="applyCalibrationCorrection('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}','${escHtml(wired.simSignalId)}')"
+                    title="${canApply ? 'Adjust the breakpoint so the gauge reads what you typed.' : 'Type the actual gauge reading in step 2 first.'}">Apply correction</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Set the user's "what does my gauge actually read" value for a channel.
+// Mutates _calibrationTestPointReading and refreshes the channel card so
+// the Apply-correction button's enabled state reflects whether there's a
+// pending correction. Empty/non-numeric clears the entry.
+function setCalibrationTestPointReading(pn, channelId, value) {
+  const key = `${pn}|${channelId}`;
+  if (value === '' || value == null) {
+    _calibrationTestPointReading.delete(key);
+  } else {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return;
+    _calibrationTestPointReading.set(key, n);
+  }
+  // Single-input edit — re-render the channel card so the Apply button's
+  // enabled state and the placeholder text refresh. Cheap.
+  renderCalibration();
+}
+
+// Apply a test-point correction. Given (currentSliderInput, userTypedActualReading),
+// computes the voltage the gauge needs at currentSliderInput so it'll read
+// userTypedActualReading, then either updates the nearest breakpoint or
+// inserts a new one at currentSliderInput.
+//
+// Math:
+//   - Today's breakpoint table tells the gauge: "at input X, output volts V".
+//   - The gauge has a fixed (hardware) volts→needle-position curve.
+//   - When the gauge reads `Y_actual` while we said volts V, the gauge's
+//     internal curve says `V → Y_actual`. So to make the gauge read
+//     `Y_desired` (= currentSliderInput), we need to find the voltage `V'`
+//     such that the gauge's internal curve maps `V' → Y_desired`.
+//   - We approximate the gauge's volts→reading slope using the LOCAL
+//     breakpoint table slope at the relevant region. That's: the user is
+//     looking at a region where input X maps to V, and V displays as
+//     Y_actual on the gauge. The gauge's curve volts→reading is the
+//     inverse of the breakpoint table for the linear region they're in.
+//     So `dV/dY ≈ slope of the breakpoint table at this region`.
+//   - Required correction: `ΔV = (Y_desired - Y_actual) × dV/dY_local`.
+//   - Apply to the breakpoint at `Y_desired` (the slider's input), or
+//     insert a new one if no breakpoint exists there.
+//
+// Cross-coupled channels (e.g. 10-1082 Mach, coupled to airspeed):
+// the same correction math works without modification. The C# coupling
+// math is `machOutputVoltage = machRefVoltage - K × (airspeedAngle - 170)`
+// where K = 20/262, so ∂(machOutputVoltage)/∂(machRefVoltage) = 1 — a
+// 1 V change to the breakpoint table moves the wheel by 1 V's worth of
+// output, the same as a non-coupled channel. The wheel's V→reading slope
+// is still the inverse of the breakpoint table slope at the current Mach
+// input, so `ΔrefV = (Mach_desired - Mach_actual) × slope_local` applies
+// identically. The only practical difference is that a wrong upstream
+// (airspeed) calibration shifts the additive airspeed term and makes the
+// Mach reading look wrong even when its table is right — hence the
+// "calibrate the coupled channel first" banner in the test-point view.
+function applyCalibrationCorrection(pn, channelIdx, channelId, simSignalId) {
+  const p = profiles[activeIdx];
+  const entry = ensureGaugeEntry(p, pn);
+  if (!entry) return;
+  const ch = entry.channels.find(c => c.id === channelId);
+  if (!ch || !Array.isArray(ch.breakpoints) || ch.breakpoints.length < 2) return;
+
+  const state = _liveCalibration[pn] || { sliderValues: {} };
+  const sliderInput = state.sliderValues[simSignalId];
+  if (typeof sliderInput !== 'number' || !Number.isFinite(sliderInput)) {
+    toast('Drag the slider to a test point first.');
+    return;
+  }
+  const readingKey = `${pn}|${channelId}`;
+  const reading = _calibrationTestPointReading.get(readingKey);
+  if (typeof reading !== 'number' || !Number.isFinite(reading)) {
+    toast('Type what the gauge actually reads in step 2 first.');
+    return;
+  }
+  if (Math.abs(reading - sliderInput) < 1e-9) {
+    toast('No correction needed — your gauge already matches the test point.');
+    return;
+  }
+
+  // Sort a working copy by input so we can find the bracketing pair.
+  const sorted = ch.breakpoints
+    .map((bp, idx) => ({ idx, input: Number(bp.input) || 0, volts: Number(bp.volts) || 0 }))
+    .sort((a, b) => a.input - b.input);
+
+  // Local slope (V per input-unit) at the slider input. Find the bracket.
+  let slope = 0;
+  let lo = null, hi = null;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sliderInput >= sorted[i].input && sliderInput <= sorted[i + 1].input) {
+      lo = sorted[i]; hi = sorted[i + 1];
+      break;
+    }
+  }
+  if (!lo || !hi) {
+    // Slider is outside the existing table range. Use the slope of the
+    // nearest segment as a best-effort approximation.
+    if (sliderInput < sorted[0].input) { lo = sorted[0]; hi = sorted[1]; }
+    else { lo = sorted[sorted.length - 2]; hi = sorted[sorted.length - 1]; }
+  }
+  const span = hi.input - lo.input;
+  if (span > 0) {
+    slope = (hi.volts - lo.volts) / span;
+  } else {
+    slope = 0; // degenerate; fall back to no correction effect
+  }
+
+  // Current expected volts at this slider input (linear interp).
+  const tInBracket = span > 0 ? (sliderInput - lo.input) / span : 0;
+  const currentVolts = lo.volts + tInBracket * (hi.volts - lo.volts);
+
+  // The user said: at gauge input `sliderInput`, my needle is at
+  // `reading` (the value-display the gauge shows, which differs from
+  // `sliderInput` by some error). The gauge's internal volts-to-display
+  // function maps `currentVolts → reading`. To make the gauge display
+  // `sliderInput` (the intended value), we need a voltage `V'` such that
+  // the gauge maps `V' → sliderInput`. Approximating the gauge's curve
+  // as locally linear with the same slope as our breakpoint table:
+  //   dDisplay/dVolts ≈ 1 / slope     (since slope = dVolts/dInput, and
+  //                                    dDisplay/dInput ≈ 1 in well-cal'd
+  //                                    regions, but in misaligned ones
+  //                                    we treat them as the same axis)
+  // Required delta: V' - currentVolts = (sliderInput - reading) × slope.
+  const deltaVolts = (sliderInput - reading) * slope;
+  const newVolts = currentVolts + deltaVolts;
+
+  // Clamp the corrected volts to the channel's output range so we don't
+  // produce a value the gauge HSM would reject anyway.
+  const meta = piecewiseOutputMeta(ch);
+  const clampedNewVolts = Math.max(meta.min, Math.min(meta.max, newVolts));
+
+  // Find an existing breakpoint at the slider input (within a small
+  // tolerance based on the input range). If one exists, update it;
+  // otherwise insert a new breakpoint at the slider input value.
+  const inputRange = Math.max(1e-6, hi.input - lo.input);
+  const matchTolerance = inputRange * 0.05; // 5% of the local bracket
+  const existing = ch.breakpoints.find(bp =>
+    Math.abs((Number(bp.input) || 0) - sliderInput) < matchTolerance
+  );
+
+  let action;
+  if (existing) {
+    const oldVolts = existing.volts;
+    existing.volts = clampedNewVolts;
+    action = `Adjusted breakpoint at input=${formatNum(sliderInput)}: ${formatNum(oldVolts)} V → ${formatNum(clampedNewVolts)} V`;
+  } else {
+    ch.breakpoints.push({ input: sliderInput, volts: clampedNewVolts });
+    // Keep the table ordered by input so the curve preview and the C#
+    // EvaluatePiecewise both produce monotonic-input results.
+    ch.breakpoints.sort((a, b) => (Number(a.input) || 0) - (Number(b.input) || 0));
+    action = `Added breakpoint at input=${formatNum(sliderInput)}: ${formatNum(clampedNewVolts)} V`;
+  }
+
+  // Clear the "what your gauge reads" field — the correction has been
+  // applied, so the next test point starts fresh.
+  _calibrationTestPointReading.delete(readingKey);
+
+  // Full re-render so the breakpoint table view, curve preview, and
+  // pending-correction state all update together.
+  renderCalibration();
+  autoSaveImmediate(pn);
+  toast(action);
 }
 
 // Hidden-output input — for analog channels gated by a digital visibility

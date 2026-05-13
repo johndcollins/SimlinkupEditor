@@ -1785,6 +1785,144 @@ details:not([open]) > .instrument-card-head { border-bottom: none; }
   background: var(--bg-info);
 }
 
+/* View-mode toggle row — sits at the top of each piecewise channel section.
+   Two pills: "Calibrate at test points" (default) and "Breakpoint table".
+   The active mode has a filled background so it's visually distinct. */
+.calibration-card-body .cal-view-toggle {
+  display: flex;
+  gap: 0;
+  margin: 8px 0 12px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: fit-content;
+}
+.calibration-card-body .cal-view-toggle .cal-view-toggle-btn {
+  border: none;
+  border-radius: 0;
+  border-right: 0.5px solid var(--border);
+  background: var(--bg-card);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-secondary);
+  transition: background .12s, color .12s;
+}
+.calibration-card-body .cal-view-toggle .cal-view-toggle-btn:last-child {
+  border-right: none;
+}
+.calibration-card-body .cal-view-toggle .cal-view-toggle-btn:hover:not(.is-active) {
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+.calibration-card-body .cal-view-toggle .cal-view-toggle-btn.is-active {
+  background: var(--text-info);
+  color: white;
+}
+
+/* Test-point view layout. Three numbered steps stacked vertically. Each
+   step has a circled number on the left and the step body on the right. */
+.calibration-card-body .cal-test-point {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px;
+}
+.calibration-card-body .cal-test-point-warning {
+  background: var(--bg-warning);
+  border: 0.5px solid var(--border);
+  border-left: 3px solid #b45309;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.calibration-card-body .cal-test-point-step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+.calibration-card-body .cal-test-point-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--text-info);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+.calibration-card-body .cal-test-point-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.calibration-card-body .cal-test-point-step-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.calibration-card-body .cal-test-point-step-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.calibration-card-body .cal-test-point-slider-row,
+.calibration-card-body .cal-test-point-reading-row {
+  display: grid;
+  grid-template-columns: 1fr 100px auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+.calibration-card-body .cal-test-point-reading-row {
+  grid-template-columns: 120px auto;
+}
+.calibration-card-body .cal-test-point-slider-row input[type="range"] {
+  width: 100%;
+  height: 4px;
+}
+.calibration-card-body .cal-test-point-input-num,
+.calibration-card-body .cal-test-point-reading {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 5px 9px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  width: 100%;
+}
+.calibration-card-body .cal-test-point-reading {
+  font-weight: 500;
+}
+.calibration-card-body .cal-test-point-reading:focus {
+  border-color: var(--border-info);
+  box-shadow: 0 0 0 2px rgba(133,183,235,0.25);
+  outline: none;
+}
+.calibration-card-body .cal-test-point-units {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.calibration-card-body .cal-test-point-apply-row {
+  margin-top: 4px;
+}
+.calibration-card-body .cal-test-point-apply-row .cal-btn-accent:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Trim grid: per-channel zero-trim and gain-trim, two columns. */
 .calibration-card-body .calibration-trim-grid {
   display: grid;
