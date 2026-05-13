@@ -492,11 +492,17 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                     fd.xDot = (float)(value * FEET_PER_SECOND_PER_KNOT);
                     fd.yDot = 0;
                     return Routing.Primary;
-                // F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES is not a struct
-                // field — F4SimSupportModule computes it from the active
-                // waypoint type at runtime. Cannot be set via shared
-                // memory; the user calibrates the HSI gauge's course
-                // deviation breakpoint table to encode the limit instead.
+                // F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES IS a struct field
+                // — fd.deviationLimit (degrees). F4SimSupportModule reads
+                // it as `flightData.deviationLimit % 180` and uses it to
+                // clamp course deviation. When zero, ANY non-zero course
+                // deviation collapses to zero via Math.Sign(cd)*0, so the
+                // bridge-driven CDI stays centered. We expose this signal
+                // both directly (so the user can drive the limit slider
+                // in live cal) and as a side-effect of writing course
+                // deviation (when limit is 0, seed it to 10° so a single-
+                // slider workflow works without the user knowing about
+                // the limit).
                 // F4_ADI__RATE_OF_TURN_INDICATOR_POSITION is derived by the
                 // upstream IndicatedRateOfTurnCalculator (filtered yaw
                 // rate over time), not invertible from a slider value.
@@ -538,7 +544,20 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                     fd.AdiIlsHorPos = (float)(value * 5.0 / DEGREES_PER_RADIAN);
                     return Routing.Primary;
                 case "F4_HSI__COURSE_DEVIATION_DEGREES":
-                    fd.courseDeviation = (float)value;
+                    // F4SimSupportModule applies a sign-flip on read (see
+                    // UpdateHsiData: returns -cd for |cd| < 90). Compensate
+                    // so a slider value of +5 surfaces as +5 in SimLinkup.
+                    fd.courseDeviation = (float)(-value);
+                    // Side-effect: seed deviationLimit to 10° if currently
+                    // zero so the clamp in F4SimSupportModule doesn't zero
+                    // the CDI deflection. The user can still drive the
+                    // limit slider directly to override.
+                    if (fd.deviationLimit == 0f) fd.deviationLimit = 10f;
+                    return Routing.Primary;
+                case "F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES":
+                    // F4SimSupportModule reads `fd.deviationLimit % 180`,
+                    // so any positive value < 180 round-trips cleanly.
+                    fd.deviationLimit = (float)value;
                     return Routing.Primary;
                 case "F4_HSI__DESIRED_COURSE_DEGREES":
                     fd.desiredCourse = (float)value;
@@ -666,7 +685,12 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                 case "F4_ADI__ILS_VERTICAL_BAR_POSITION":
                     value = fd.AdiIlsHorPos * DEGREES_PER_RADIAN / 5.0; return true;
                 case "F4_HSI__COURSE_DEVIATION_DEGREES":
-                    value = fd.courseDeviation; return true;
+                    // Mirrors the write-path sign flip so a read-after-write
+                    // round-trips: bridge wrote `-value` to fd.courseDeviation,
+                    // read negates back to recover the user's value.
+                    value = -fd.courseDeviation; return true;
+                case "F4_HSI__COURSE_DEVIATION_LIMIT_DEGREES":
+                    value = fd.deviationLimit; return true;
                 case "F4_HSI__DESIRED_COURSE_DEGREES":
                     value = fd.desiredCourse; return true;
                 case "F4_HSI__BEARING_TO_BEACON_DEGREES":
