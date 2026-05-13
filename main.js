@@ -122,8 +122,30 @@ function seedUserDataFiles() {
 
   for (const filename of seedables) {
     const dst = path.join(userDataDir, filename);
-    if (fs.existsSync(dst)) continue;
     const src = path.join(bundledDir, filename);
+
+    // instruments.json is the editor-shipped gauge catalog — it changes
+    // every release we add a gauge, and users never hand-edit it (the
+    // editor has no UI for that). Always overwrite when the bundled copy
+    // differs from the userData copy, so new gauges show up automatically
+    // on upgrade. The userData override path still works for the
+    // sim-*.json signal files (the ones users DO import/edit via the
+    // SimSupport tab); those keep the original seed-once policy below.
+    if (filename === 'instruments.json') {
+      try {
+        const dstMissing = !fs.existsSync(dst);
+        const differs = !dstMissing && fs.readFileSync(src).compare(fs.readFileSync(dst)) !== 0;
+        if (dstMissing || differs) {
+          fs.copyFileSync(src, dst);
+          if (!dstMissing) console.log('Refreshed instruments.json from bundled catalog (new gauges may have been added)');
+        }
+      } catch (e) {
+        console.warn(`Could not refresh ${filename}:`, e.message);
+      }
+      continue;
+    }
+
+    if (fs.existsSync(dst)) continue;
     try {
       fs.copyFileSync(src, dst);
     } catch (e) {
@@ -674,6 +696,30 @@ ipcMain.handle('load-static-data', async () => {
 ipcMain.handle('open-user-data-folder', async () => {
   if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
   shell.openPath(USER_DATA_DIR);
+});
+
+// Reset a static-data file in userData by overwriting it with the bundled
+// copy. Used by the SimSupport tab's "Reset" button to recover from a bad
+// import. Works for both sim-*.json signal files and instruments.json
+// itself. Returns { success } on success or { success: false, error } on
+// failure. The filename is validated as a basename-only string to prevent
+// path traversal (the userData / bundled directories are app-controlled).
+ipcMain.handle('reset-data-file', async (_, filename) => {
+  if (!filename || /[\\/]/.test(filename) || filename.startsWith('.')) {
+    return { success: false, error: 'Invalid filename' };
+  }
+  const src = path.join(BUNDLED_DATA_DIR, filename);
+  const dst = path.join(USER_DATA_DIR, filename);
+  if (!fs.existsSync(src)) {
+    return { success: false, error: `No bundled copy of ${filename} to reset from` };
+  }
+  try {
+    if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+    fs.copyFileSync(src, dst);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 // Open a signals JSON file in the OS default editor (whatever's associated

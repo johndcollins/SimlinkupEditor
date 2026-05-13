@@ -27,9 +27,10 @@ function renderSimSupportCard(ss) {
     </div>
     <div class="inst-name">${escHtml(ss.label)}</div>
     <div style="font-size:10px;color:var(--text-secondary);margin-top:2px">${signalCount} signal${signalCount === 1 ? '' : 's'}</div>
-    <div style="display:flex;gap:4px;margin-top:6px">
+    <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
       <button class="btn-sm" onclick="viewSimSignals('${ss.id}')" title="Open ${escHtml(ss.signalsFile)} in your default editor">View signals</button>
       <button class="btn-sm" onclick="importSimSignals('${ss.id}')" title="Replace ${escHtml(ss.signalsFile)} with a JSON file from disk">Import…</button>
+      <button class="btn-sm" onclick="resetSimSignals('${ss.id}')" title="Restore ${escHtml(ss.signalsFile)} to the editor's bundled defaults (wipes any local edits)">Reset</button>
     </div>`;
   return card;
 }
@@ -59,6 +60,55 @@ async function viewSimSignals(simId) {
   if (!ss?.signalsFile) return;
   const result = await window.api.openSignalsFile(ss.signalsFile);
   if (result && !result.success) toast('Could not open file: ' + result.error);
+}
+
+// Reset a sim's signals file in userData back to the editor's bundled
+// defaults. Confirms first (this WILL wipe any local edits / imports).
+// Reuses the same post-import refresh flow as importSimSignals — reload
+// SIM_SIGNALS from disk, re-validate every profile against the restored
+// catalog, offer to clear newly-broken mappings.
+async function resetSimSignals(simId) {
+  const ss = SIM_SUPPORTS.find(s => s.id === simId);
+  if (!ss?.signalsFile) return;
+  if (!confirm(`Reset ${ss.label}'s signals file to the editor's bundled defaults?\n\nThis wipes any local edits or imports.`)) return;
+  const result = await window.api.resetDataFile(ss.signalsFile);
+  if (!result?.success) {
+    toast('Reset failed: ' + (result?.error || 'unknown'));
+    return;
+  }
+  // Mirror the post-import refresh path so the in-memory catalog and
+  // every profile's edge validation stays consistent.
+  const data = await window.api.loadStaticData();
+  if (data?.simSignals?.[simId]) {
+    SIM_SIGNALS[simId] = data.simSignals[simId];
+    _simOptionsHtmlCache = { key: null, html: null };
+  }
+  const invalidByProfile = [];
+  for (const p of profiles) {
+    if (!p.chain) continue;
+    refreshInvalidEdgeFlags(p);
+    const broken = p.chain.edges.filter(e => e.invalid);
+    if (broken.length) invalidByProfile.push({ profile: p, count: broken.length });
+  }
+  if (invalidByProfile.length > 0) {
+    const total = invalidByProfile.reduce((sum, x) => sum + x.count, 0);
+    const summary = invalidByProfile.map(x => `${x.profile.name}: ${x.count}`).join(', ');
+    const ok = confirm(
+      `${ss.label} signals reset.\n\n` +
+      `${total} mapping${total === 1 ? '' : 's'} reference signals that no longer exist in the bundled catalog (${summary}).\n\n` +
+      `Click OK to clear those mappings, or Cancel to keep them (they'll show as broken until fixed).`
+    );
+    if (ok) {
+      for (const { profile } of invalidByProfile) {
+        profile.chain.edges = profile.chain.edges.filter(e => !e.invalid);
+        rebuildInstrumentView(profile);
+      }
+      toast(`Cleared ${total} broken mapping${total === 1 ? '' : 's'}.`);
+    }
+  } else {
+    toast(`${ss.label} signals reset to bundled defaults.`);
+  }
+  renderEditor();
 }
 
 async function importSimSignals(simId) {

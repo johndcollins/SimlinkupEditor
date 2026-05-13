@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   openUserDataFolder:  ()          => ipcRenderer.invoke('open-user-data-folder'),
   openSignalsFile:     (filename)  => ipcRenderer.invoke('open-signals-file', filename),
   importSignalsFile:   (filename)  => ipcRenderer.invoke('import-signals-file', filename),
+  resetDataFile:       (filename)  => ipcRenderer.invoke('reset-data-file', filename),
   openDriverConfig:    (args)      => ipcRenderer.invoke('open-driver-config', args),
   // ── Live calibration bridge ────────────────────────────────────────────
   // Spawn-on-first-call C# helper that writes synthetic sim signal values
