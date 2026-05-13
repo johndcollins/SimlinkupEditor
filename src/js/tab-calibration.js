@@ -521,6 +521,14 @@ function gaugeInputRange(pn, gaugePort) {
     // Channel matches. Pick range from whichever fields the kind exposes.
     if (ch.kind === 'piecewise' && ch.breakpoints && ch.breakpoints.length >= 2) {
       const bps = ch.breakpoints;
+      // Normalized-input channels (e.g. Henk HSI Board 2 course deviation —
+      // breakpoint table consumes -1..+1, but the HSM divides the raw F4
+      // value by a separate limit signal before evaluating). For live cal
+      // the slider needs to send the F4 signal's NATIVE units, so let the
+      // caller fall through to inferSignalRange on this channel shape.
+      if (bps[0].input === -1 && bps[bps.length - 1].input === 1) {
+        return null;
+      }
       return {
         min: bps[0].input,
         max: bps[bps.length - 1].input,
