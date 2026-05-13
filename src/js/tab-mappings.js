@@ -402,35 +402,34 @@ function renderMappings() {
       render: () => renderDirectGroupMappingCard(group, gi),
     });
   }
-  const filter = mapSearch.trim().toLowerCase();
-  const filteredCards = cards.filter(c => {
-    if (mapTypeFilter !== 'all' && c.kind !== mapTypeFilter) return false;
-    if (mapStatusFilter !== 'all' && c.status !== mapStatusFilter) return false;
-    if (filter && !c.title.includes(filter)) return false;
-    return true;
-  });
+  // Stash the unfiltered card list on the function so renderMappingsResults()
+  // can re-filter without rebuilding it. Rebuilding the card list is cheap
+  // but the render() closures bake in references to the current `inst` /
+  // `group` / `view` snapshots — they need to be fresh on full renders but
+  // can be reused across pure filter-only re-renders (which are what
+  // typing in the search box triggers).
+  renderMappings._cards = cards;
 
-  // Toolbar now has a filter bar matching the Instruments tab pattern.
-  // The descriptive paragraph that used to live up here moved to a
-  // smaller hint below the filter bar so the filter controls have
-  // priority real estate.
+  // Toolbar — rendered once per full render. The filter inputs' handlers
+  // call renderMappingsResults() so typing/filter changes don't tear down
+  // the search input and kill focus mid-keystroke.
   let html = `
     <div class="filter-bar">
       <input type="search" placeholder="Search cards…" value="${escHtml(mapSearch)}"
-             oninput="mapSearch=this.value;renderMappings()"/>
-      <select onchange="mapTypeFilter=this.value;renderMappings()">
+             oninput="mapSearch=this.value;renderMappingsResults()"/>
+      <select onchange="mapTypeFilter=this.value;renderMappingsResults()">
         <option value="all"    ${mapTypeFilter==='all'?'selected':''}>All types</option>
         <option value="gauge"  ${mapTypeFilter==='gauge'?'selected':''}>Gauges</option>
         <option value="direct" ${mapTypeFilter==='direct'?'selected':''}>Direct groups</option>
       </select>
-      <select onchange="mapStatusFilter=this.value;renderMappings()">
+      <select onchange="mapStatusFilter=this.value;renderMappingsResults()">
         <option value="all"      ${mapStatusFilter==='all'?'selected':''}>All statuses</option>
         <option value="complete" ${mapStatusFilter==='complete'?'selected':''}>Fully wired</option>
         <option value="partial"  ${mapStatusFilter==='partial'?'selected':''}>Partially wired</option>
         <option value="none"     ${mapStatusFilter==='none'?'selected':''}>Not wired</option>
         <option value="broken"   ${mapStatusFilter==='broken'?'selected':''}>Broken</option>
       </select>
-      <span style="font-size:11px;color:var(--text-secondary)">${filteredCards.length} of ${cards.length} card${cards.length!==1?'s':''}</span>
+      <span id="mapCount" style="font-size:11px;color:var(--text-secondary)"></span>
       <button class="btn-sm" onclick="setAllGaugeCardsOpen(true)">Expand all</button>
       <button class="btn-sm" onclick="setAllGaugeCardsOpen(false)">Collapse all</button>
     </div>`;
@@ -445,8 +444,33 @@ function renderMappings() {
   }
   html += '<div id="mappingCards"></div>';
   pane.innerHTML = html;
-  const container = document.getElementById('mappingCards');
 
+  renderMappingsResults();
+}
+
+// Rebuilds ONLY the filtered cards container and the count pill. Safe to
+// call on every keystroke — leaves the search input and filter dropdowns
+// untouched so focus survives. Reuses the unfiltered card list from the
+// most recent renderMappings() call (renderMappings._cards), so a filter
+// change doesn't need to recompute per-card completion status, etc.
+function renderMappingsResults() {
+  const container = document.getElementById('mappingCards');
+  if (!container) return;
+  const cards = renderMappings._cards || [];
+  const filter = mapSearch.trim().toLowerCase();
+  const filteredCards = cards.filter(c => {
+    if (mapTypeFilter !== 'all' && c.kind !== mapTypeFilter) return false;
+    if (mapStatusFilter !== 'all' && c.status !== mapStatusFilter) return false;
+    if (filter && !c.title.includes(filter)) return false;
+    return true;
+  });
+
+  const countEl = document.getElementById('mapCount');
+  if (countEl) {
+    countEl.textContent = `${filteredCards.length} of ${cards.length} card${cards.length !== 1 ? 's' : ''}`;
+  }
+
+  container.innerHTML = '';
   if (filteredCards.length === 0) {
     container.innerHTML = cards.length === 0
       ? ''

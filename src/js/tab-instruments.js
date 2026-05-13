@@ -3,9 +3,51 @@
 // list (Active). Both are pure render functions reading INSTRUMENTS and
 // p.instruments; the toggle handler mutates state and re-renders the editor.
 
+// Renders the static toolbar (search + filters) once, then delegates the
+// filtered-results body to renderInstrumentsResults(). Split this way so
+// the search input doesn't get torn down and recreated on every keystroke
+// (which would kill focus mid-type). The toolbar's oninput/onchange
+// handlers call renderInstrumentsResults() directly to update only the
+// groups container.
 function renderInstruments() {
   const pane = document.getElementById('pane-instruments');
   if (!pane) return;
+
+  // Distinct manufacturers across the full catalog (not just `filtered`) so
+  // the dropdown stays stable as the user narrows by search/category.
+  const allMfrs = [...new Set(INSTRUMENTS.map(i => i.manufacturer).filter(Boolean))].sort();
+  const mfrOptions = allMfrs.map(m =>
+    `<option value="${m}" ${instMfrFilter===m?'selected':''}>${m}</option>`).join('');
+
+  pane.innerHTML = `
+    <div class="filter-bar">
+      <input type="search" placeholder="Search instruments…" value="${instSearch}" oninput="instSearch=this.value;renderInstrumentsResults()">
+      <select onchange="instMfrFilter=this.value;renderInstrumentsResults()">
+        <option value="all" ${instMfrFilter==='all'?'selected':''}>All manufacturers</option>
+        ${mfrOptions}
+      </select>
+      <select onchange="instFilter=this.value;renderInstrumentsResults()">
+        <option value="all" ${instFilter==='all'?'selected':''}>All categories</option>
+        <option value="flight" ${instFilter==='flight'?'selected':''}>Flight / navigation</option>
+        <option value="engine" ${instFilter==='engine'?'selected':''}>Engine</option>
+        <option value="fuel" ${instFilter==='fuel'?'selected':''}>Fuel</option>
+        <option value="attitude" ${instFilter==='attitude'?'selected':''}>Attitude</option>
+      </select>
+      <span id="instCount" style="font-size:11px;color:var(--text-secondary)"></span>
+      <button class="btn-sm" onclick="setAllMfrGroupsOpen(true)">Expand all</button>
+      <button class="btn-sm" onclick="setAllMfrGroupsOpen(false)">Collapse all</button>
+    </div>
+    <div id="instGroups"></div>`;
+
+  renderInstrumentsResults();
+}
+
+// Rebuilds ONLY the filtered-groups container and the count pill. Safe to
+// call on every keystroke — leaves the search input + filter dropdowns
+// untouched so focus is preserved.
+function renderInstrumentsResults() {
+  const groupsEl = document.getElementById('instGroups');
+  if (!groupsEl) return;  // toolbar not mounted yet — caller should hit renderInstruments() first
   const p = profiles[activeIdx];
   const filtered = INSTRUMENTS.filter(inst => {
     const matchSearch = !instSearch || inst.name.toLowerCase().includes(instSearch.toLowerCase()) || inst.pn.includes(instSearch);
@@ -14,33 +56,12 @@ function renderInstruments() {
     return matchSearch && matchCat && matchMfr;
   });
 
-  // Distinct manufacturers across the full catalog (not just `filtered`) so the
-  // dropdown stays stable as the user narrows by search/category.
-  const allMfrs = [...new Set(INSTRUMENTS.map(i => i.manufacturer).filter(Boolean))].sort();
-  const mfrOptions = allMfrs.map(m =>
-    `<option value="${m}" ${instMfrFilter===m?'selected':''}>${m}</option>`).join('');
+  const countEl = document.getElementById('instCount');
+  if (countEl) {
+    countEl.textContent = `${filtered.length} instrument${filtered.length !== 1 ? 's' : ''}`;
+  }
 
-  pane.innerHTML = `
-    <div class="filter-bar">
-      <input type="search" placeholder="Search instruments…" value="${instSearch}" oninput="instSearch=this.value;renderInstruments()">
-      <select onchange="instMfrFilter=this.value;renderInstruments()">
-        <option value="all" ${instMfrFilter==='all'?'selected':''}>All manufacturers</option>
-        ${mfrOptions}
-      </select>
-      <select onchange="instFilter=this.value;renderInstruments()">
-        <option value="all" ${instFilter==='all'?'selected':''}>All categories</option>
-        <option value="flight" ${instFilter==='flight'?'selected':''}>Flight / navigation</option>
-        <option value="engine" ${instFilter==='engine'?'selected':''}>Engine</option>
-        <option value="fuel" ${instFilter==='fuel'?'selected':''}>Fuel</option>
-        <option value="attitude" ${instFilter==='attitude'?'selected':''}>Attitude</option>
-      </select>
-      <span style="font-size:11px;color:var(--text-secondary)">${filtered.length} instrument${filtered.length!==1?'s':''}</span>
-      <button class="btn-sm" onclick="setAllMfrGroupsOpen(true)">Expand all</button>
-      <button class="btn-sm" onclick="setAllMfrGroupsOpen(false)">Collapse all</button>
-    </div>
-    <div id="instGroups"></div>`;
-
-  const groupsEl = document.getElementById('instGroups');
+  groupsEl.innerHTML = '';
   if (filtered.length === 0) {
     groupsEl.innerHTML = '<div class="empty">No instruments match your search.</div>';
     return;
