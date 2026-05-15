@@ -390,6 +390,15 @@ function parseGaugeConfigXml(xmlText, pn) {
       if (typeof tplCh.unitsPerRevolution === 'number') fallback.unitsPerRevolution = tplCh.unitsPerRevolution;
       if (typeof tplCh.invert === 'boolean') fallback.invert = tplCh.invert;
       if (tplCh.coupledTo) fallback.coupledTo = tplCh.coupledTo;
+      // Output-unit hints (DAC-output gauges — Henk HSI/ADI/Henkie family).
+      // Without these, piecewiseOutputMeta(ch) on the live entry defaults
+      // to 'volts' and the slider/breakpoint mutations write to the wrong
+      // attribute. See the matching block in the non-fallback branch below.
+      if (tplCh.outputUnit) fallback.outputUnit = tplCh.outputUnit;
+      if (typeof tplCh.outputMin === 'number') fallback.outputMin = tplCh.outputMin;
+      if (typeof tplCh.outputMax === 'number') fallback.outputMax = tplCh.outputMax;
+      if (tplCh.outputLabel) fallback.outputLabel = tplCh.outputLabel;
+      if (typeof tplCh.outputStep === 'number') fallback.outputStep = tplCh.outputStep;
       out.channels.push(fallback);
       continue;
     }
@@ -556,6 +565,18 @@ function parseGaugeConfigXml(xmlText, pn) {
       zeroTrim: Number.isFinite(zeroRaw) ? zeroRaw : (tplCh.zeroTrim ?? CALIBRATION_TRIM_DEFAULTS.zeroTrim),
       gainTrim: Number.isFinite(gainRaw) ? gainRaw : (tplCh.gainTrim ?? CALIBRATION_TRIM_DEFAULTS.gainTrim),
     };
+    // Carry the output-unit hints from the TEMPLATE onto the live entry.
+    // Without this, a DAC-output channel parsed from disk (e.g. Henk HSI
+    // CDI breakpoints in `output` units) renders correctly via the tpl
+    // path but mutates via `piecewiseOutputMeta(ch)` which defaults to
+    // 'volts' when ch.outputUnit is missing — the edit writes to bp.volts
+    // instead of bp.output, the renderer reads bp.output and the slider
+    // appears to snap back to the on-disk value on the next render.
+    if (tplCh.outputUnit) parsed.outputUnit = tplCh.outputUnit;
+    if (typeof tplCh.outputMin === 'number') parsed.outputMin = tplCh.outputMin;
+    if (typeof tplCh.outputMax === 'number') parsed.outputMax = tplCh.outputMax;
+    if (tplCh.outputLabel) parsed.outputLabel = tplCh.outputLabel;
+    if (typeof tplCh.outputStep === 'number') parsed.outputStep = tplCh.outputStep;
     if (typeof inputMin === 'number') parsed.inputMin = inputMin;
     if (typeof inputMax === 'number') parsed.inputMax = inputMax;
     if (typeof angleMinDegrees === 'number') parsed.angleMinDegrees = angleMinDegrees;
