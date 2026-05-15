@@ -1659,6 +1659,8 @@ function renderTestPointCalibrationView(pn, channelIdx, tplCh, liveCh, meta) {
           </div>
           <div class="cal-test-point-apply-row">
             <button class="cal-btn cal-btn-accent" ${canApply ? '' : 'disabled'}
+                    id="cal-test-point-apply-${escHtml(pn)}-${escHtml(tplCh.id)}"
+                    data-pn="${escHtml(pn)}" data-channel-id="${escHtml(tplCh.id)}" data-sim-signal-id="${escHtml(wired.simSignalId)}"
                     onclick="applyCalibrationCorrection('${escHtml(pn)}',${channelIdx},'${escHtml(tplCh.id)}','${escHtml(wired.simSignalId)}')"
                     title="${canApply ? 'Adjust the breakpoint so the gauge reads what you typed.' : 'Type the actual gauge reading in step 2 first.'}">Apply correction</button>
           </div>
@@ -1668,21 +1670,46 @@ function renderTestPointCalibrationView(pn, channelIdx, tplCh, liveCh, meta) {
 }
 
 // Set the user's "what does my gauge actually read" value for a channel.
-// Mutates _calibrationTestPointReading and refreshes the channel card so
-// the Apply-correction button's enabled state reflects whether there's a
-// pending correction. Empty/non-numeric clears the entry.
+// Surgically updates ONLY the Apply-correction button's disabled state and
+// title — NEVER re-renders the surrounding card. A full re-render would
+// tear down the focused number input and snap focus away on every
+// keystroke, making the field uneditable (the user couldn't type "1.5"
+// because the partial "1." would be cleared and refocused after each
+// character). Empty/non-numeric clears the stored entry.
 function setCalibrationTestPointReading(pn, channelId, value) {
   const key = `${pn}|${channelId}`;
   if (value === '' || value == null) {
     _calibrationTestPointReading.delete(key);
   } else {
+    // Number('') / Number('.') / Number('-') are all NaN — that's fine,
+    // we just don't update the stored value. The user's partial input
+    // stays in the DOM (we never touch the input), and once they type
+    // enough characters to form a finite number, this branch stores it.
     const n = Number(value);
-    if (!Number.isFinite(n)) return;
-    _calibrationTestPointReading.set(key, n);
+    if (!Number.isFinite(n)) {
+      // Partial / invalid input clears the stored value so the Apply
+      // button disables until a complete number is typed.
+      _calibrationTestPointReading.delete(key);
+    } else {
+      _calibrationTestPointReading.set(key, n);
+    }
   }
-  // Single-input edit — re-render the channel card so the Apply button's
-  // enabled state and the placeholder text refresh. Cheap.
-  renderCalibration();
+  // Update only the Apply button — leave the input + slider DOM alone.
+  const btn = document.getElementById(`cal-test-point-apply-${pn}-${channelId}`);
+  if (!btn) return;
+  const storedReading = _calibrationTestPointReading.get(key);
+  const hasReading = typeof storedReading === 'number' && Number.isFinite(storedReading);
+  const simSignalId = btn.dataset.simSignalId;
+  const sliderValue = simSignalId
+    ? (_liveCalibration[pn]?.sliderValues?.[simSignalId])
+    : undefined;
+  const canApply = hasReading
+    && typeof sliderValue === 'number'
+    && Math.abs(storedReading - sliderValue) > 1e-9;
+  btn.disabled = !canApply;
+  btn.title = canApply
+    ? 'Adjust the breakpoint so the gauge reads what you typed.'
+    : 'Type the actual gauge reading in step 2 first.';
 }
 
 // Apply a test-point correction. Given (currentSliderInput, userTypedActualReading),
