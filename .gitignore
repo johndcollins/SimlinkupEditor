@@ -53,3 +53,7 @@ obj/
 packages/
 TestResults/
 *.pdb
+
+# C# Dev Kit (VS Code extension) language service cache — auto-generated,
+# regenerated on demand, never meant to be committed.
+*.csproj.lscache
