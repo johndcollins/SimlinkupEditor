@@ -80,6 +80,18 @@ function parseGaugePort(id, instrumentPrefixMap, declaredPns) {
     return { pn: inst.pn, port, known: true };
   }
   // Named gauge HSMs we know about (matched longest-first).
+  //
+  // The prefix here is the literal that appears in the on-disk .mapping
+  // file's signal IDs (e.g. "JDLADI01_Pitch_From_Sim" → prefix
+  // "JDLADI01"). For most named-prefix gauges this also IS the catalog
+  // pn — but JDLADI01 is the standing counterexample (catalog pn is
+  // "JDL-ADI01" with a dash; the C# emits IDs without the dash). To
+  // keep the chain model honest, return the canonical catalog pn
+  // (looked up via digitPrefix) rather than the on-disk prefix
+  // verbatim. Otherwise every downstream INSTRUMENTS.find(i => i.pn ===
+  // returned) would miss and the gauge would appear orphaned — which
+  // surfaced as "anything I do in the editor resets the JDLADI01 mapping"
+  // because the chain rebuild dropped the unrecognized edges on save.
   const namedPrefixes = [
     'HenkF16ADISupportBoard',
     'HenkieF16Altimeter',
@@ -90,11 +102,20 @@ function parseGaugePort(id, instrumentPrefixMap, declaredPns) {
     'JDLADI01',
   ];
   for (const prefix of namedPrefixes) {
-    if (id.startsWith(prefix + '_')) {
-      return { pn: prefix, port: id.slice(prefix.length + 1), known: false };
-    }
-    if (id.startsWith(prefix + '__')) {
-      return { pn: prefix, port: id.slice(prefix.length + 2), known: false };
+    if (id.startsWith(prefix + '_') || id.startsWith(prefix + '__')) {
+      const sep = id.startsWith(prefix + '__') ? 2 : 1;
+      // Resolve the on-disk prefix back to the catalog pn via digitPrefix.
+      // Falls back to the prefix verbatim if no match (e.g. INSTRUMENTS
+      // not yet hydrated, or a future named-prefix gauge that hasn't been
+      // added to instruments.json yet).
+      const inst = (typeof INSTRUMENTS !== 'undefined' && INSTRUMENTS)
+        ? INSTRUMENTS.find(i => i.digitPrefix === prefix)
+        : null;
+      return {
+        pn: inst ? inst.pn : prefix,
+        port: id.slice(prefix.length + sep),
+        known: false,
+      };
     }
   }
   return null;
