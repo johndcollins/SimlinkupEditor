@@ -536,11 +536,20 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                     // Source reads AdiIlsVerPos * DEG_PER_RAD / glideslope_limit.
                     // Glideslope deviation limit is 1° per F4SimSupportModule.
                     fd.AdiIlsVerPos = (float)(value * 1.0 / DEGREES_PER_RADIAN);
+                    // Same seed-limit trick as course deviation: F4SimSupportModule's
+                    // DetermineWhetherToShowILSCommandBarsAndToFromFlags gates
+                    // showCommandBars on `|ilsBar| <= deviationLimit / N`. With
+                    // deviationLimit=0 (default), the flag goes false for any
+                    // non-zero bar position and the ADI HSM parks the bar
+                    // off-screen. Seed to 10° so the flag stays true when the
+                    // user drives the bar slider through its range.
+                    if (fd.deviationLimit == 0f) fd.deviationLimit = 10f;
                     return Routing.Primary;
                 case "F4_ADI__ILS_VERTICAL_BAR_POSITION":
                     // Source reads AdiIlsHorPos * DEG_PER_RAD / localizer_limit
                     // (5°).
                     fd.AdiIlsHorPos = (float)(value * 5.0 / DEGREES_PER_RADIAN);
+                    if (fd.deviationLimit == 0f) fd.deviationLimit = 10f;
                     return Routing.Primary;
                 case "F4_HSI__COURSE_DEVIATION_DEGREES":
                     {
