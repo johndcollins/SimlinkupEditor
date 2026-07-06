@@ -123,6 +123,29 @@ function generateDriverConfigs(p) {
     if (!out[filename]) out[filename] = { content: text, createOnly: true };
   }
 
+  // Per-gauge legacy device-identity configs. Today only the Henkie F-16
+  // fuel flow indicator has one — its C# HSM refuses to instantiate at all
+  // unless HenkieF16FuelFlowIndicator.config exists with a valid device
+  // block (Address/COMPort/ConnectionType/StatorBaseAngles). Without this
+  // file, live-cal writes to F4_FUEL_FLOW*_POUNDS_PER_HOUR go to shared
+  // memory but the HSM isn't listening so the physical gauge doesn't move.
+  // Authored via the Hardware Config tab (renderHenkieFuelFlowCardHtml)
+  // into p.gaugeLegacyConfigs['HenkieF16FuelFlow']; emitted here.
+  if ((p.instruments || []).includes('HenkieF16FuelFlow')) {
+    const decl = p.gaugeLegacyConfigs?.HenkieF16FuelFlow;
+    const content = renderHenkieFuelFlowLegacyConfig(decl);
+    // Same createOnly policy as the per-gauge calibration configs above:
+    // when a parsed entry exists in memory the Hardware Config tab is the
+    // canonical authoring surface (overwrite on save); when there's no
+    // entry we're either seeding a fresh profile from defaults or the user
+    // hand-authored the file outside the editor and hasn't opened the
+    // Hardware Config card — protect that hand-edit.
+    out['HenkieF16FuelFlowIndicator.config'] = {
+      content,
+      createOnly: !decl,
+    };
+  }
+
   return out;
 }
 
@@ -312,6 +335,56 @@ function renderHenkQuadSinCosConfig(decl) {
   }
   lines.push('  </Devices>');
   lines.push('</HenkieQuadSinCos>');
+  return lines.join('\n');
+}
+
+// Build the HenkieF16FuelFlowIndicator.config XML from
+// p.gaugeLegacyConfigs.HenkieF16FuelFlow. Root element name matches the
+// C# [XmlRoot("HenkieF16FuelFlowIndicator")] attribute. Element order per
+// <Device> is: ConnectionType, COMPort, Address, StatorBaseAnglesConfig,
+// OutputChannelsConfig, DiagnosticLEDMode. CalibrationData is deliberately
+// omitted here — the unified-schema file
+// HenkieF16FuelFlowHardwareSupportModule.config (rendered by
+// gauge-config-io.js:renderGaugeConfigXml) overrides it at load time via
+// TryLoadUnifiedCalibration. Keeping the two files separated matches the
+// C# HSM's expectation: this file is device identity + wiring, the other
+// is per-gauge calibration.
+function renderHenkieFuelFlowLegacyConfig(decl) {
+  const devices = (decl?.devices && decl.devices.length)
+    ? decl.devices
+    : [henkieFuelFlowDefaultDevice()];
+  const lines = [
+    '<?xml version="1.0"?>',
+    '<HenkieF16FuelFlowIndicator xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">',
+    '  <Devices>',
+  ];
+  for (let d = 0; d < devices.length; d++) {
+    const dev = devices[d];
+    const stator = dev.statorBaseAngles || HENKIE_FUELFLOW_STATOR_DEFAULTS;
+    const digOuts = dev.digOuts || {};
+    lines.push('    <Device>');
+    lines.push(`      <!-- Device ${d} (authored by SimLinkup Profile Editor — edit via Hardware Config tab) -->`);
+    lines.push(`      <ConnectionType>${dev.connectionType ?? HENKIE_FUELFLOW_DEVICE_DEFAULTS.connectionType}</ConnectionType>`);
+    lines.push(`      <COMPort>${escXml(dev.comPort ?? '')}</COMPort>`);
+    lines.push(`      <Address>${escXml(dev.address ?? HENKIE_FUELFLOW_DEVICE_DEFAULTS.address)}</Address>`);
+    lines.push('      <StatorBaseAnglesConfig>');
+    lines.push(`        <S1BaseAngleDegrees>${Number(stator.s1 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s1)}</S1BaseAngleDegrees>`);
+    lines.push(`        <S2BaseAngleDegrees>${Number(stator.s2 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s2)}</S2BaseAngleDegrees>`);
+    lines.push(`        <S3BaseAngleDegrees>${Number(stator.s3 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s3)}</S3BaseAngleDegrees>`);
+    lines.push('      </StatorBaseAnglesConfig>');
+    lines.push('      <OutputChannelsConfig>');
+    for (const name of HENKIE_FUELFLOW_DIGOUT_NAMES) {
+      const ch = digOuts[name] || { initialValue: false };
+      lines.push(`        <${name}>`);
+      lines.push(`          <InitialValue>${ch.initialValue ? 'true' : 'false'}</InitialValue>`);
+      lines.push(`        </${name}>`);
+    }
+    lines.push('      </OutputChannelsConfig>');
+    lines.push(`      <DiagnosticLEDMode>${dev.diagnosticLEDMode ?? HENKIE_FUELFLOW_DEVICE_DEFAULTS.diagnosticLEDMode}</DiagnosticLEDMode>`);
+    lines.push('    </Device>');
+  }
+  lines.push('  </Devices>');
+  lines.push('</HenkieF16FuelFlowIndicator>');
   return lines.join('\n');
 }
 

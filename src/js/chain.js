@@ -706,6 +706,22 @@ function applyLoadedChain(p, mappingFileList, hsmRegistryText, ssmRegistryText, 
     backfillNiclasMorinDTSDevices(p.drivers.niclasmorindts);
   }
 
+  // p.gaugeLegacyConfigs — per-gauge legacy device-identity configs. Today
+  // only the Henkie F-16 fuel flow indicator has one (its C# HSM won't
+  // instantiate at all without HenkieF16FuelFlowIndicator.config in the
+  // profile dir — the unified calibration file only overrides the
+  // breakpoint table). Parsed here so the Hardware Config tab has state
+  // to render against; save.js emits from the same state.
+  p.gaugeLegacyConfigs = {};
+  const henkieFuelFlowLegacy = driverConfigsRaw?.['HenkieF16FuelFlowIndicator.config'];
+  if (henkieFuelFlowLegacy) {
+    const parsed = parseHenkieFuelFlowLegacyConfig(henkieFuelFlowLegacy);
+    if (parsed.devices.length > 0) {
+      p.gaugeLegacyConfigs.HenkieF16FuelFlow = parsed;
+      backfillHenkieFuelFlowDevices(p.gaugeLegacyConfigs.HenkieF16FuelFlow);
+    }
+  }
+
   // p.simSupports — list of declared sim-support ids.
   p.simSupports = declaredSimSupportsFromClasses(ssmClasses);
 

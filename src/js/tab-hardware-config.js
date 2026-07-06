@@ -35,7 +35,16 @@ function renderHardwareConfig() {
   const declaredIds = Object.keys(p.drivers || {}).sort((a, b) =>
     DRIVER_META[a].label.localeCompare(DRIVER_META[b].label));
 
-  if (declaredIds.length === 0) {
+  // Per-gauge legacy device-identity cards: some gauges (today only
+  // HenkieF16FuelFlow) need their own device-identity config file in the
+  // profile directory in addition to per-driver configs. The card appears
+  // in Hardware Config whenever the corresponding instrument is declared.
+  const legacyGaugeCards = [];
+  if ((p.instruments || []).includes('HenkieF16FuelFlow')) {
+    legacyGaugeCards.push('HenkieF16FuelFlow');
+  }
+
+  if (declaredIds.length === 0 && legacyGaugeCards.length === 0) {
     pane.innerHTML = `
       <div class="empty">
         No drivers declared yet. Go to the
@@ -58,6 +67,30 @@ function renderHardwareConfig() {
   for (const id of declaredIds) {
     container.appendChild(renderHardwareConfigCard(id));
   }
+  for (const pn of legacyGaugeCards) {
+    container.appendChild(renderLegacyGaugeConfigCard(pn));
+  }
+}
+
+// Per-gauge legacy device-identity card. Follows the same details/summary
+// shape as renderHardwareConfigCard so the open-state persistence and
+// dirty listener plumbing work uniformly. Today only HenkieF16FuelFlow
+// uses this path.
+function renderLegacyGaugeConfigCard(pn) {
+  const p = profiles[activeIdx];
+  const card = document.createElement('details');
+  card.className = 'hwconfig-card';
+  const key = `${p.name}|legacy:${pn}`;
+  if (_hwconfigOpen.has(key)) card.open = true;
+  card.addEventListener('toggle', () => {
+    if (card.open) _hwconfigOpen.add(key); else _hwconfigOpen.delete(key);
+  });
+  if (pn === 'HenkieF16FuelFlow') {
+    card.innerHTML = renderHenkieFuelFlowCardHtml(p.gaugeLegacyConfigs?.HenkieF16FuelFlow);
+  } else {
+    card.innerHTML = `<summary class="hwconfig-card-head">${escHtml(pn)}</summary><div class="hwconfig-card-body">Unknown gauge legacy config.</div>`;
+  }
+  return card;
 }
 
 function renderHardwareConfigCard(driverId) {
@@ -2585,5 +2618,172 @@ function resetPokeysDevice(deviceIdx) {
   const keptAddress = dev.address;
   decl.devices[deviceIdx] = poKeysDefaultDevice();
   decl.devices[deviceIdx].address = keptAddress;
+  renderHardwareConfig();
+}
+
+// ── Henkie F-16 Fuel Flow (legacy device-identity card) ─────────────────────
+//
+// Authors HenkieF16FuelFlowIndicator.config (identity + stator angles +
+// DIG_OUTs). The unified-schema calibration file is authored separately
+// via gauge-config-io.js — this card only exposes the device-identity
+// fields the C# HSM needs to open the USB/PHCC link.
+function renderHenkieFuelFlowCardHtml(decl) {
+  const devices = (decl?.devices && decl.devices.length)
+    ? decl.devices
+    : [henkieFuelFlowDefaultDevice()];
+  const nHint = devices.length === 1
+    ? '1 device'
+    : `${devices.length} devices`;
+
+  const header = `
+    <summary class="hwconfig-card-head">
+      <span class="hwconfig-card-chevron">▶</span>
+      <div class="hwconfig-card-headline">
+        <div class="hwconfig-card-title">Henkie F-16 Fuel Flow (device identity)</div>
+        <div class="hwconfig-card-sub">${nHint} · HenkieF16FuelFlowIndicator.config</div>
+      </div>
+    </summary>`;
+
+  const intro = `
+    <div style="font-size:11px;color:var(--text-secondary);font-style:italic;margin:0 0 12px 0;line-height:1.5">
+      Device-identity settings the Henkie fuel flow C# HSM needs to open the
+      USB/PHCC link — without this file SimLinkup won't instantiate the gauge
+      at all (live cal writes go nowhere). The calibration breakpoint table
+      is authored separately in the <em>Calibration</em> tab and overrides
+      the legacy <code>CalibrationData</code> block at load time.
+    </div>`;
+
+  const deviceSections = devices.map((dev, di) => renderHenkieFuelFlowDeviceHtml(dev, di)).join('');
+  const addButton = `
+    <div style="margin-top:12px">
+      <button class="btn-sm btn-primary" onclick="addHenkieFuelFlowDevice()">+ Add device</button>
+    </div>`;
+
+  return header + `
+    <div class="hwconfig-card-body">
+      ${intro}
+      ${deviceSections}
+      ${addButton}
+    </div>`;
+}
+
+function renderHenkieFuelFlowDeviceHtml(dev, di) {
+  const stator = dev.statorBaseAngles || HENKIE_FUELFLOW_STATOR_DEFAULTS;
+  const digOuts = dev.digOuts || {};
+  const connOptions = HENKIE_FUELFLOW_CONNECTION_VALUES.map(v =>
+    `<option value="${v}" ${dev.connectionType === v ? 'selected' : ''}>${v}</option>`).join('');
+  const diagOptions = HENKIE_FUELFLOW_DIAG_LED_VALUES.map(v =>
+    `<option value="${v}" ${dev.diagnosticLEDMode === v ? 'selected' : ''}>${v}</option>`).join('');
+
+  const digOutRows = HENKIE_FUELFLOW_DIGOUT_NAMES.map(name => {
+    const ch = digOuts[name] || { initialValue: false };
+    return `
+      <label>${name} initial
+        <select onchange="setHenkieFuelFlowDigOut(${di},'${name}',this.value)">
+          <option value="false" ${!ch.initialValue ? 'selected' : ''}>false</option>
+          <option value="true"  ${ch.initialValue  ? 'selected' : ''}>true</option>
+        </select>
+      </label>`;
+  }).join('');
+
+  const canRemove = di > 0;
+  return `
+    <div class="hwconfig-device-section" style="margin-bottom:14px">
+      <div class="hwconfig-device-head">
+        <div class="hwconfig-device-title">Device ${di + 1}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm" onclick="resetHenkieFuelFlowDevice(${di})">Reset to defaults</button>
+          <button class="btn-sm btn-danger" ${canRemove ? '' : 'disabled title="At least one device required"'} onclick="removeHenkieFuelFlowDevice(${di})">Remove</button>
+        </div>
+      </div>
+      <div class="hwconfig-section-label">Identity</div>
+      <div class="hwconfig-board-grid">
+        <label>Address
+          <input type="text" value="${escHtml(dev.address ?? '')}" placeholder="0x46"
+                 onchange="setHenkieFuelFlowField(${di},'address',this.value)"/>
+        </label>
+        <label>COM port
+          <input type="text" value="${escHtml(dev.comPort ?? '')}" placeholder="COM4"
+                 onchange="setHenkieFuelFlowField(${di},'comPort',this.value)"/>
+        </label>
+        <label>Connection
+          <select onchange="setHenkieFuelFlowField(${di},'connectionType',this.value)">${connOptions}</select>
+        </label>
+        <label>Diagnostic LED
+          <select onchange="setHenkieFuelFlowField(${di},'diagnosticLEDMode',this.value)">${diagOptions}</select>
+        </label>
+      </div>
+      <div class="hwconfig-section-label" style="margin-top:10px">Stator base angles (degrees)</div>
+      <div class="hwconfig-board-grid">
+        <label>S1
+          <input type="number" step="any" value="${Number(stator.s1 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s1)}"
+                 onchange="setHenkieFuelFlowStator(${di},'s1',this.value)"/>
+        </label>
+        <label>S2
+          <input type="number" step="any" value="${Number(stator.s2 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s2)}"
+                 onchange="setHenkieFuelFlowStator(${di},'s2',this.value)"/>
+        </label>
+        <label>S3
+          <input type="number" step="any" value="${Number(stator.s3 ?? HENKIE_FUELFLOW_STATOR_DEFAULTS.s3)}"
+                 onchange="setHenkieFuelFlowStator(${di},'s3',this.value)"/>
+        </label>
+      </div>
+      <div class="hwconfig-section-label" style="margin-top:10px">DIG_OUT initial values</div>
+      <div class="hwconfig-board-grid" style="grid-template-columns:repeat(5,1fr)">
+        ${digOutRows}
+      </div>
+    </div>`;
+}
+
+// Ensure the state slot exists before mutation. Called by every setter
+// below so we can mutate against a fresh default when the user first
+// touches a field on a freshly-declared HenkieF16FuelFlow instrument.
+function _ensureHenkieFuelFlowDecl() {
+  const p = profiles[activeIdx];
+  if (!p.gaugeLegacyConfigs) p.gaugeLegacyConfigs = {};
+  if (!p.gaugeLegacyConfigs.HenkieF16FuelFlow) {
+    p.gaugeLegacyConfigs.HenkieF16FuelFlow = { devices: [henkieFuelFlowDefaultDevice()] };
+  }
+  return p.gaugeLegacyConfigs.HenkieF16FuelFlow;
+}
+
+function setHenkieFuelFlowField(di, field, value) {
+  const decl = _ensureHenkieFuelFlowDecl();
+  const dev = decl.devices[di];
+  if (!dev) return;
+  dev[field] = String(value);
+}
+function setHenkieFuelFlowStator(di, which, value) {
+  const decl = _ensureHenkieFuelFlowDecl();
+  const dev = decl.devices[di];
+  if (!dev) return;
+  if (!dev.statorBaseAngles) dev.statorBaseAngles = { ...HENKIE_FUELFLOW_STATOR_DEFAULTS };
+  const n = Number(value);
+  if (Number.isFinite(n)) dev.statorBaseAngles[which] = n;
+}
+function setHenkieFuelFlowDigOut(di, name, value) {
+  const decl = _ensureHenkieFuelFlowDecl();
+  const dev = decl.devices[di];
+  if (!dev) return;
+  if (!dev.digOuts) dev.digOuts = {};
+  dev.digOuts[name] = { initialValue: value === 'true' };
+}
+function addHenkieFuelFlowDevice() {
+  const decl = _ensureHenkieFuelFlowDecl();
+  decl.devices.push(henkieFuelFlowDefaultDevice());
+  renderHardwareConfig();
+}
+function removeHenkieFuelFlowDevice(di) {
+  const decl = _ensureHenkieFuelFlowDecl();
+  if (decl.devices.length <= 1) return;
+  if (!confirm(`Remove device ${di + 1} from the Henkie F-16 Fuel Flow legacy config?`)) return;
+  decl.devices.splice(di, 1);
+  renderHardwareConfig();
+}
+function resetHenkieFuelFlowDevice(di) {
+  const decl = _ensureHenkieFuelFlowDecl();
+  if (!decl.devices[di]) return;
+  if (!confirm(`Reset device ${di + 1} to Henkie F-16 Fuel Flow defaults? Address, COM port, stator angles and DIG_OUT initial values will all be reset.`)) return;
+  decl.devices[di] = henkieFuelFlowDefaultDevice();
   renderHardwareConfig();
 }

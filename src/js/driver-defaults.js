@@ -77,6 +77,50 @@ function henkSdiDefaultDevice() {
   };
 }
 
+// ── HenkieF16FuelFlow legacy config defaults ─────────────────────────────────
+//
+// The Henkie F-16 fuel flow indicator's C# HSM
+// (HenkieF16FuelFlowIndicatorHardwareSupportModule) refuses to instantiate
+// unless HenkieF16FuelFlowIndicator.config exists in the profile directory —
+// it needs device identity (Address, COMPort, ConnectionType) to open the
+// USB/PHCC link, stator base angles for the synchro drive, and 5 DIG_OUT
+// initial values. The unified-schema calibration file
+// (HenkieF16FuelFlowHardwareSupportModule.config) is a per-gauge override
+// that only replaces the CalibrationData block.
+//
+// Editor state shape: p.gaugeLegacyConfigs['HenkieF16FuelFlow'] carries a
+// { devices: [{...}] } array (mirrors the on-disk <Devices><Device>...
+// schema). The user can declare multiple Henkie fuel flow boards on one
+// bench, though 99% of profiles will have exactly one device.
+//
+// Defaults come from the shipping sample profiles (Nigel, Kukki,
+// HenkieFuelFlowIndicator) — 0x46 address, COM4, USB, S1=113/S2=233/S3=353
+// stator angles, all DIG_OUTs off.
+const HENKIE_FUELFLOW_DEVICE_DEFAULTS = Object.freeze({
+  address: '0x46', comPort: '', connectionType: 'USB',
+  diagnosticLEDMode: 'Heartbeat',
+});
+const HENKIE_FUELFLOW_STATOR_DEFAULTS = Object.freeze({ s1: 113, s2: 233, s3: 353 });
+const HENKIE_FUELFLOW_DIGOUT_NAMES = Object.freeze([
+  'DIG_OUT_1', 'DIG_OUT_2', 'DIG_OUT_3', 'DIG_OUT_4', 'DIG_OUT_5',
+]);
+const HENKIE_FUELFLOW_CONNECTION_VALUES = Object.freeze(['USB', 'PHCC']);
+const HENKIE_FUELFLOW_DIAG_LED_VALUES   = Object.freeze([
+  'Off', 'On', 'Heartbeat', 'ToggleOnAcceptedCommand', 'OnDuringDOAPacketReception',
+]);
+
+function henkieFuelFlowDefaultDevice() {
+  const digOuts = {};
+  for (const name of HENKIE_FUELFLOW_DIGOUT_NAMES) {
+    digOuts[name] = { initialValue: false };
+  }
+  return {
+    ...HENKIE_FUELFLOW_DEVICE_DEFAULTS,
+    statorBaseAngles: { ...HENKIE_FUELFLOW_STATOR_DEFAULTS },
+    digOuts,
+  };
+}
+
 // ── ArduinoSeat defaults ─────────────────────────────────────────────────────
 //
 // Single-instance driver with a richer schema than any other "single"-shape

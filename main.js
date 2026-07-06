@@ -385,6 +385,10 @@ ipcMain.handle('load-profile', async (_, profileDir) => {
       'TeensyVectorDrawingHardwareSupportModule.config',
       'HenkieQuadSinCosHardwareSupportModule.config',
       'PoKeysHardwareSupportModule.config',
+      // Per-gauge legacy device-identity file (Henkie F-16 fuel flow). Named
+      // Indicator.config rather than HardwareSupportModule.config, so it
+      // wouldn't be picked up by the wildcard sweep below — list explicitly.
+      'HenkieF16FuelFlowIndicator.config',
     ];
     const driverConfigs = {};
     for (const cfg of driverConfigFilenames) {

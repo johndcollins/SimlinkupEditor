@@ -450,6 +450,109 @@ function backfillHenkQuadSinCosDevices(decl) {
   }
 }
 
+// ── HenkieF16FuelFlow legacy-config parser / backfill ────────────────────────
+//
+// Parses HenkieF16FuelFlowIndicator.config into
+// { devices: [{ address, comPort, connectionType, diagnosticLEDMode,
+//               statorBaseAngles: { s1, s2, s3 },
+//               digOuts: { DIG_OUT_1..5: { initialValue: bool } } }, ...] }.
+// The CalibrationData block is deliberately IGNORED here — it's superseded
+// by the unified-schema calibration file authored via gauge-config-io.js,
+// and the C# HSM applies the same override on load. Round-trip of the
+// CalibrationData block is handled in gaugeConfigsRaw so hand-edited
+// legacy calibration is preserved even for gauges the user hasn't opened
+// in the Calibration tab.
+function parseHenkieFuelFlowLegacyConfig(xmlText) {
+  const out = { devices: [] };
+  if (!xmlText) return out;
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  } catch {
+    return out;
+  }
+  if (doc.querySelector('parsererror')) return out;
+
+  const childByName = (parent, name) => {
+    if (!parent) return null;
+    const lname = name.toLowerCase();
+    for (const c of parent.children) {
+      if (c.tagName.toLowerCase() === lname) return c;
+    }
+    return null;
+  };
+  const textOf = (el) => el ? (el.textContent || '').trim() : '';
+  const boolOf = (el) => textOf(el).toLowerCase() === 'true';
+  const enumOrDefault = (raw, allowed, dflt) => allowed.includes(raw) ? raw : dflt;
+
+  for (const deviceEl of doc.querySelectorAll('Devices > Device')) {
+    const dev = henkieFuelFlowDefaultDevice();
+    const conn = textOf(childByName(deviceEl, 'ConnectionType'));
+    dev.connectionType = enumOrDefault(conn, HENKIE_FUELFLOW_CONNECTION_VALUES, dev.connectionType);
+    const com = textOf(childByName(deviceEl, 'COMPort'));
+    if (com) dev.comPort = com;
+    const addr = textOf(childByName(deviceEl, 'Address'));
+    if (addr) dev.address = addr;
+    dev.diagnosticLEDMode = enumOrDefault(
+      textOf(childByName(deviceEl, 'DiagnosticLEDMode')),
+      HENKIE_FUELFLOW_DIAG_LED_VALUES, dev.diagnosticLEDMode,
+    );
+    const statorEl = childByName(deviceEl, 'StatorBaseAnglesConfig');
+    if (statorEl) {
+      const s1 = Number(textOf(childByName(statorEl, 'S1BaseAngleDegrees')));
+      const s2 = Number(textOf(childByName(statorEl, 'S2BaseAngleDegrees')));
+      const s3 = Number(textOf(childByName(statorEl, 'S3BaseAngleDegrees')));
+      if (Number.isFinite(s1)) dev.statorBaseAngles.s1 = s1;
+      if (Number.isFinite(s2)) dev.statorBaseAngles.s2 = s2;
+      if (Number.isFinite(s3)) dev.statorBaseAngles.s3 = s3;
+    }
+    const outputsEl = childByName(deviceEl, 'OutputChannelsConfig');
+    if (outputsEl) {
+      for (const name of HENKIE_FUELFLOW_DIGOUT_NAMES) {
+        const chEl = childByName(outputsEl, name);
+        if (chEl) {
+          dev.digOuts[name] = { initialValue: boolOf(childByName(chEl, 'InitialValue')) };
+        }
+      }
+    }
+    out.devices.push(dev);
+  }
+  return out;
+}
+
+// Backfill any missing fields on an already-loaded HenkieF16FuelFlow legacy
+// config entry. Idempotent. Inflates older records that lack newer fields
+// (there aren't any today — this exists for parity with the other
+// backfill helpers and to catch future schema drift).
+function backfillHenkieFuelFlowDevices(decl) {
+  if (!decl || !Array.isArray(decl.devices)) return;
+  for (let i = 0; i < decl.devices.length; i++) {
+    const old = decl.devices[i] || {};
+    const dev = henkieFuelFlowDefaultDevice();
+    if (typeof old.address === 'string' && old.address) dev.address = old.address;
+    if (typeof old.comPort === 'string') dev.comPort = old.comPort;
+    if (HENKIE_FUELFLOW_CONNECTION_VALUES.includes(old.connectionType)) {
+      dev.connectionType = old.connectionType;
+    }
+    if (HENKIE_FUELFLOW_DIAG_LED_VALUES.includes(old.diagnosticLEDMode)) {
+      dev.diagnosticLEDMode = old.diagnosticLEDMode;
+    }
+    if (old.statorBaseAngles) {
+      if (Number.isFinite(Number(old.statorBaseAngles.s1))) dev.statorBaseAngles.s1 = Number(old.statorBaseAngles.s1);
+      if (Number.isFinite(Number(old.statorBaseAngles.s2))) dev.statorBaseAngles.s2 = Number(old.statorBaseAngles.s2);
+      if (Number.isFinite(Number(old.statorBaseAngles.s3))) dev.statorBaseAngles.s3 = Number(old.statorBaseAngles.s3);
+    }
+    if (old.digOuts) {
+      for (const name of HENKIE_FUELFLOW_DIGOUT_NAMES) {
+        if (old.digOuts[name] && typeof old.digOuts[name].initialValue === 'boolean') {
+          dev.digOuts[name] = { initialValue: old.digOuts[name].initialValue };
+        }
+      }
+    }
+    decl.devices[i] = dev;
+  }
+}
+
 // ── PHCC parser / backfill ───────────────────────────────────────────────────
 //
 // PhccHardwareSupportModule.config is a one-field pointer file that names the
