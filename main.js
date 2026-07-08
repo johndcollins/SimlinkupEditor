@@ -904,9 +904,22 @@ function ensureBridge() {
 
   _bridgeProc.stderr.on('data', (chunk) => {
     // Surface bridge stderr to the main process console for debugging.
-    // Don't propagate to the renderer; bridge errors should already come
-    // back as { ok:false, error } in the JSON channel.
-    console.error('[bridge stderr]', chunk.toString().trim());
+    // Bridge fatal errors should already come back as { ok:false, error }
+    // in the JSON channel, so this is a secondary diagnostic surface.
+    //
+    // Trace lines prefixed with [trace-setsignal] are ALSO forwarded to
+    // the renderer's DevTools console via IPC so users can watch the
+    // per-signal write path live without opening a separate console
+    // window on the main process.
+    const text = chunk.toString();
+    console.error('[bridge stderr]', text.trim());
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith('[trace-setsignal]')) {
+        try { mainWindow?.webContents?.send('bridge:trace', trimmed); } catch {}
+      }
+    }
   });
 
   _bridgeProc.on('exit', (code, signal) => {

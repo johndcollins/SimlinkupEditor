@@ -33,6 +33,17 @@ contextBridge.exposeInMainWorld('api', {
     endSession:      (sim)            => ipcRenderer.invoke('bridge:endSession', { sim }),
     enumeratePoKeys:  ()                => ipcRenderer.invoke('bridge:enumeratePoKeys'),
     setPoKeysOutput:  (args)            => ipcRenderer.invoke('bridge:setPoKeysOutput', args),
+    // Subscribe to per-signal bridge trace lines. Main forwards each
+    // `[trace-setsignal] ...` line from the bridge's stderr. Returns an
+    // unsubscribe function. Used by the Calibration tab's live-cal
+    // handler to log every write to DevTools so users can diagnose
+    // "the slider doesn't move the gauge" without opening a separate
+    // console window on the main process.
+    onTrace: (cb) => {
+      const listener = (_event, line) => cb(line);
+      ipcRenderer.on('bridge:trace', listener);
+      return () => ipcRenderer.removeListener('bridge:trace', listener);
+    },
   },
   // Process-level check (not a bridge call — main.js shells out to
   // tasklist directly). Used by the PoKeys test handlers to decide

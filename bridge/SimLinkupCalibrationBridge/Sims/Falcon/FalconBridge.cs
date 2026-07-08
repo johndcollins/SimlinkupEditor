@@ -156,6 +156,13 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
             foreach (var kv in signals)
             {
                 var routed = RouteSignal(kv.Key, kv.Value, ref _flightData, ref _flightData2);
+                // Trace per-signal routing to stderr so the editor's main
+                // process can surface it to the renderer DevTools console.
+                // Format is a single "[trace-setsignal]" prefix so main.js
+                // can recognise + forward it without accidentally logging
+                // unrelated stderr.
+                Console.Error.WriteLine(
+                    $"[trace-setsignal] {kv.Key} value={kv.Value} routing={routed}");
                 switch (routed)
                 {
                     case Routing.Primary:   primaryDirty   = true; break;
@@ -164,8 +171,27 @@ namespace SimLinkupCalibrationBridge.Sims.Falcon
                 }
             }
 
-            if (primaryDirty)   FlushPrimary();
-            if (secondaryDirty) FlushSecondary();
+            if (primaryDirty)
+            {
+                FlushPrimary();
+                // Post-flush trace: read back the specific offsets that
+                // correspond to the fields we care about. This proves the
+                // marshaller wrote them and the shared memory area contains
+                // the new values.
+                Console.Error.WriteLine(
+                    $"[trace-setsignal] flushed primary. " +
+                    $"nozzlePos={_flightData.nozzlePos} " +
+                    $"oilPressure={_flightData.oilPressure} " +
+                    $"rpm={_flightData.rpm}");
+            }
+            if (secondaryDirty)
+            {
+                FlushSecondary();
+                Console.Error.WriteLine(
+                    $"[trace-setsignal] flushed secondary. " +
+                    $"nozzlePos2={_flightData2.nozzlePos2} " +
+                    $"oilPressure2={_flightData2.oilPressure2}");
+            }
             return unknown;
         }
 

@@ -63,6 +63,21 @@ async function declineDisclaimer() {
 }
 
 (async () => {
+  // Bridge trace subscription. Each `[trace-setsignal]` line from the
+  // bridge's stderr surfaces here so users can watch every live-cal write
+  // in DevTools without opening a separate console. Subscribed once for
+  // the lifetime of the renderer — no unsubscribe needed. Guarded on the
+  // API existing so older preload builds don't blow up.
+  try {
+    if (window.api?.bridge?.onTrace) {
+      window.api.bridge.onTrace((line) => {
+        console.log('[bridge]', line);
+      });
+    }
+  } catch (e) {
+    console.warn('bridge trace subscription failed:', e);
+  }
+
   // Disclaimer gate. Check settings BEFORE doing anything that probes the
   // user's filesystem (auto-detect, load static data, etc.) so the user
   // gets the modal immediately on first launch with nothing happening
