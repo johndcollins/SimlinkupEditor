@@ -23,12 +23,15 @@ GAUGE_CALIBRATION_DEFAULTS['10-1091'] = Object.freeze({
       kind: 'piecewise_resolver',
       role: 'sin',
       partnerChannel: '101091_Oil_Pressure_COS_To_Instrument',
-      // 11 breakpoints, one every 10 PSI. Defaults are the linear mapping
-      // 0%→0°, 100%→320° (slope 3.2°/%). Edit individual rows to correct
-      // local synchro drift.
+      // 12 breakpoints. Defaults are the linear mapping 0%→0°, 100%→320°
+      // (slope 3.2°/%), extended one extra step to 110%→352° so the
+      // breakpoint table covers the gauge's over-max region — real 10-1091
+      // gauges have a visible arc past the 100 mark and F4 shared memory
+      // occasionally carries values in that range. Edit individual rows to
+      // correct local synchro drift.
       // inputMin/inputMax bound the editor's scrub slider only.
       inputMin: 0,
-      inputMax: 100,
+      inputMax: 110,
       breakpoints: [
         { input:   0, angle:   0 },
         { input:  10, angle:  32 },
@@ -41,6 +44,7 @@ GAUGE_CALIBRATION_DEFAULTS['10-1091'] = Object.freeze({
         { input:  80, angle: 256 },
         { input:  90, angle: 288 },
         { input: 100, angle: 320 },
+        { input: 110, angle: 352 },
       ],
       peakVolts: 10,
       zeroTrim: 0,

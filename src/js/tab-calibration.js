@@ -585,8 +585,14 @@ function inferSignalRange(signalId, label) {
     'F4_RPM2__RPM_PERCENT':                                     { min:    0, max:   103, units: '%' },
     'F4_FTIT1__FTIT_TEMP_DEG_CELCIUS':                          { min:    0, max:  1200, units: '°C' },
     'F4_FTIT2__FTIT_TEMP_DEG_CELCIUS':                          { min:    0, max:  1200, units: '°C' },
-    'F4_OIL_PRESS1__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
-    'F4_OIL_PRESS2__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
+    // Oil pressure slider goes to 110 rather than 100 — real Simtek 10-1091
+    // (and equivalent) gauges have an over-max region past the 100 mark that
+    // users need to reach for full-scale bench calibration. F4 publishes the
+    // signal declared as 0..100 but the shared memory float carries whatever
+    // the bridge writes; the gauge HSM's own clamp is what enforces the
+    // physical limit.
+    'F4_OIL_PRESS1__OIL_PRESS_PERCENT':                         { min:    0, max:   110, units: '%' },
+    'F4_OIL_PRESS2__OIL_PRESS_PERCENT':                         { min:    0, max:   110, units: '%' },
     'F4_NOZ_POS1__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
     'F4_NOZ_POS2__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
     'F4_FUEL_FLOW1__FUEL_FLOW_POUNDS_PER_HOUR':                 { min:    0, max: 80000, units: 'lbs/hr' },
@@ -621,10 +627,6 @@ function inferSignalRange(signalId, label) {
     'F4_HSI__CURRENT_HEADING_DEGREES':                          { min:    0, max:   360, units: '°' },
     'F4_HSI__DESIRED_HEADING_DEGREES':                          { min:    0, max:   360, units: '°' },
     'F4_HSI__DISTANCE_TO_BEACON_NAUTICAL_MILES':                { min:    0, max:   999, units: 'nm' },
-    'F4_RPM2__RPM_PERCENT':                                     { min:    0, max:   103, units: '%' },
-    'F4_FUEL_FLOW2__FUEL_FLOW_POUNDS_PER_HOUR':                 { min:    0, max: 80000, units: 'lbs/hr' },
-    'F4_OIL_PRESS2__OIL_PRESS_PERCENT':                         { min:    0, max:   100, units: '%' },
-    'F4_NOZ_POS2__NOZZLE_PERCENT_OPEN':                         { min:    0, max:   100, units: '%' },
     'F4_FUEL_QTY__AFT_QTY_LBS':                                 { min:    0, max:  4200, units: 'lbs' },
     'F4_FUEL_QTY__FOREWARD_QTY_LBS':                            { min:    0, max:  4200, units: 'lbs' },
     'F4_FUEL_QTY__TOTAL_FUEL_LBS':                              { min:    0, max: 20000, units: 'lbs' },
